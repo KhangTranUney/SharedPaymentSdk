@@ -64,8 +64,8 @@ internal actual class PaymentWebView actual constructor(
         return deferred.await()
     }
 
-    actual fun handleCallback(url: String) {
-        val nsUrl = NSURL.URLWithString(url) ?: return
+    actual fun handleCallback(uri: String) {
+        val nsUrl = NSURL.URLWithString(uri) ?: return
 
         val components = NSURLComponents
             .componentsWithURL(nsUrl, true)

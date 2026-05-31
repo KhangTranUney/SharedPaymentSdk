@@ -31,7 +31,7 @@ internal expect class PaymentWebView(context: PlatformContext) {
         callbackScheme: String
     ): WebViewResult
 
-    fun handleCallback(url: String)
+    fun handleCallback(uri: String)
 
     /**
      * Detect user returning without completing payment.

@@ -35,12 +35,12 @@ internal actual class PaymentWebView actual constructor(
         return deferred.await()
     }
 
-    actual fun handleCallback(url: String) {
-        val uri = Uri.parse(url)
+    actual fun handleCallback(uri: String) {
+        val parsed = Uri.parse(uri)
         val params = mutableMapOf<String, String>()
 
-        uri.queryParameterNames.forEach { key ->
-            uri.getQueryParameter(key)?.let {
+        parsed.queryParameterNames.forEach { key ->
+            parsed.getQueryParameter(key)?.let {
                 params[key] = it
             }
         }

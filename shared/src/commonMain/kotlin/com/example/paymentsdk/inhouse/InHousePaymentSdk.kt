@@ -52,9 +52,9 @@ class InHousePaymentSdk(
      *
      * @return true if the URL was handled by the SDK
      */
-    fun handlePaymentCallback(url: String): Boolean {
-        if (!url.startsWith("$callbackScheme://")) return false
-        webView.handleCallback(url)
+    fun handlePaymentCallback(uri: String): Boolean {
+        if (!uri.startsWith("$callbackScheme://")) return false
+        webView.handleCallback(uri)
         return true
     }
 
