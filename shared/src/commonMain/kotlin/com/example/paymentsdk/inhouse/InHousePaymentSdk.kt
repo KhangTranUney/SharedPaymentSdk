@@ -22,7 +22,7 @@ import io.ktor.serialization.kotlinx.json.json
  * ```
  *
  * All internals (HTTP client, browser) are hidden.
- * Host app must forward deep links via [handleOpenURL].
+ * Host app must forward deep links via [handlePaymentCallback].
  */
 class InHousePaymentSdk(
     context: PlatformContext,
@@ -52,7 +52,7 @@ class InHousePaymentSdk(
      *
      * @return true if the URL was handled by the SDK
      */
-    fun handleOpenURL(url: String): Boolean {
+    fun handlePaymentCallback(url: String): Boolean {
         if (!url.startsWith("$callbackScheme://")) return false
         webView.handleCallback(url)
         return true

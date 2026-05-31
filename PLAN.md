@@ -120,8 +120,8 @@ class InHousePaymentSdk(
     callbackScheme: String = "myapp"
 ) : PaymentSdk {
 
-    fun handleOpenURL(url: String): Boolean  // forward URLs (SDK checks scheme)
-    fun handleUserReturn()                   // Android: call from onResume()
+    fun handlePaymentCallback(url: String): Boolean  // forward URLs (SDK checks scheme)
+    fun handleUserReturn()                           // Android: call from onResume()
 }
 
 // PlatformContext — the only expect/actual the caller sees
@@ -148,7 +148,7 @@ purchase() called
     → User pays on Stripe/PayPal page
     → Gateway redirects to myapp://payment/callback?status=success&transaction_id=123
     → OS routes deep link to app
-    → Host app calls sdk.handleOpenURL(url) — SDK checks scheme
+    → Host app calls sdk.handlePaymentCallback(url) — SDK checks scheme
     → SDK parses params, resumes purchase()
     → Returns PurchaseResult.Success(transactionId)
 ```
@@ -169,7 +169,7 @@ purchase() called
 ```kotlin
 override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
-    intent.data?.let { sdk.handleOpenURL(it.toString()) }
+    intent.data?.let { sdk.handlePaymentCallback(it.toString()) }
 }
 
 override fun onResume() {
@@ -190,7 +190,7 @@ override fun onResume() {
 
 ```swift
 .onOpenURL { url in
-    sdk.handleOpenURL(url: url.absoluteString)
+    sdk.handlePaymentCallback(url: url.absoluteString)
 }
 ```
 
@@ -330,7 +330,7 @@ iosApp/
 | **`sealed interface PurchaseResult`** | More flexible than sealed class. Uses `data object` for singletons. |
 | **`PaymentApiClient` + `PaymentWebView` are `internal`** | Caller only sees `InHousePaymentSdk(clientId, baseUrl)`. No leaking of HTTP client or browser details. |
 | **Single class + `PlatformContext`** | `InHousePaymentSdk` is one class in `commonMain` (not expect/actual). `expect class PlatformContext` abstracts the Android `Activity` dependency. All business logic in one place. |
-| **`handleOpenURL()` checks scheme internally** | Caller forwards all URLs blindly. SDK matches against `callbackScheme` and returns `Boolean`. |
+| **`handlePaymentCallback()` checks scheme internally** | Caller forwards all URLs blindly. SDK matches against `callbackScheme` and returns `Boolean`. |
 | **CustomTabsIntent / SFSafariViewController** | System browser sandbox, visible URL bar, shared cookies. More secure than in-app WebView for payments. |
-| **`CompletableDeferred` bridging** | `purchase()` suspends. Deep link arrives asynchronously via `handleOpenURL()`. `CompletableDeferred` bridges the two. |
+| **`CompletableDeferred` bridging** | `purchase()` suspends. Deep link arrives asynchronously via `handlePaymentCallback()`. `CompletableDeferred` bridges the two. |
 | **NativePaymentSdk in app layer** | StoreKit 2 is Swift-only, Google Play Billing is Android-only. Cannot be KMP-ified. |

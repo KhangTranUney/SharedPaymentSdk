@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         intent.data?.let { uri ->
-            inHouseSdk?.handleOpenURL(uri.toString())
+            inHouseSdk?.handlePaymentCallback(uri.toString())
         }
     }
 
