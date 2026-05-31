@@ -190,7 +190,7 @@ override fun onResume() {
 
 ```swift
 .onOpenURL { url in
-    sdk.handlePaymentCallback(url: url.absoluteString)
+    sdk.handlePaymentCallback(uri: url.absoluteString)
 }
 ```
 

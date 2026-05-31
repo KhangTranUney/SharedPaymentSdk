@@ -29,7 +29,7 @@ struct PaymentApp: App {
             CheckoutView(paymentSdk: paymentSdk)
                 .onOpenURL { url in
                     inHouseSdk?.handlePaymentCallback(
-                        url: url.absoluteString
+                        uri: url.absoluteString
                     )
                 }
         }
