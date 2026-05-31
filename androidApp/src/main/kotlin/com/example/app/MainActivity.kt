@@ -43,9 +43,8 @@ class MainActivity : ComponentActivity() {
     // Forward deep link callback from Custom Tab
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        val uri = intent.data ?: return
-        if (uri.scheme == "myapp") {
-            inHouseSdk?.handleCallback(uri.toString())
+        intent.data?.let { uri ->
+            inHouseSdk?.handleOpenURL(uri.toString())
         }
     }
 

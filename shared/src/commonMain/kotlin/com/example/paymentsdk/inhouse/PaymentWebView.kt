@@ -22,7 +22,7 @@ internal sealed interface WebViewResult {
  *
  * Internal to the SDK — callers never see this class.
  * Deep link callbacks are forwarded via
- * [InHousePaymentSdk.handleCallback].
+ * [InHousePaymentSdk.handleOpenURL].
  */
 internal expect class PaymentWebView(context: PlatformContext) {
 
@@ -31,7 +31,11 @@ internal expect class PaymentWebView(context: PlatformContext) {
         callbackScheme: String
     ): WebViewResult
 
-    fun handleCallback(url: String)
+    /**
+     * Forward an incoming URL. Returns true if the URL
+     * matched the expected callback scheme and was handled.
+     */
+    fun handleOpenURL(url: String): Boolean
 
     /**
      * Detect user returning without completing payment.

@@ -22,7 +22,7 @@ import io.ktor.serialization.kotlinx.json.json
  * ```
  *
  * All internals (HTTP client, browser) are hidden.
- * Host app must forward deep links to [handleCallback].
+ * Host app must forward deep links via [handleOpenURL].
  */
 class InHousePaymentSdk(
     context: PlatformContext,
@@ -44,12 +44,16 @@ class InHousePaymentSdk(
     private val webView = PaymentWebView(context)
 
     /**
-     * Forward deep link callbacks here.
+     * Forward incoming URLs to the SDK. The SDK checks
+     * the scheme internally — no comparison needed.
+     *
      * - Android: call from onNewIntent()
      * - iOS: call from .onOpenURL()
+     *
+     * @return true if the URL was handled by the SDK
      */
-    fun handleCallback(url: String) =
-        webView.handleCallback(url)
+    fun handleOpenURL(url: String): Boolean =
+        webView.handleOpenURL(url)
 
     /**
      * Android: call from onResume() with ~500ms delay.
