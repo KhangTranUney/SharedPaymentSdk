@@ -19,8 +19,8 @@ import io.ktor.serialization.kotlinx.json.json
  * ```
  */
 actual class InHousePaymentSdk private constructor(
-    private val impl: InHousePaymentSdkImpl
-) : PaymentSdk by impl {
+    private val delegate: InHousePaymentSdkDelegate
+) : PaymentSdk by delegate {
 
     constructor(
         activity: Activity,
@@ -28,7 +28,7 @@ actual class InHousePaymentSdk private constructor(
         baseUrl: String,
         callbackScheme: String = "myapp"
     ) : this(
-        InHousePaymentSdkImpl(
+        InHousePaymentSdkDelegate(
             apiClient = PaymentApiClient(
                 baseUrl,
                 HttpClient {
@@ -44,8 +44,8 @@ actual class InHousePaymentSdk private constructor(
     )
 
     actual fun handleCallback(url: String) =
-        impl.handleCallback(url)
+        delegate.handleCallback(url)
 
     actual fun handleUserReturn() =
-        impl.handleUserReturn()
+        delegate.handleUserReturn()
 }

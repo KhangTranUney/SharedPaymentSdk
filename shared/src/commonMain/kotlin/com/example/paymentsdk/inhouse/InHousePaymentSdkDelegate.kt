@@ -10,9 +10,9 @@ import com.example.paymentsdk.models.Transaction
  * business logic. Shared across platforms.
  *
  * The public [InHousePaymentSdk] (expect/actual) wraps
- * this via Kotlin class delegation (`by impl`).
+ * this via Kotlin class delegation (`by delegate`).
  */
-internal class InHousePaymentSdkImpl(
+internal class InHousePaymentSdkDelegate(
     private val apiClient: PaymentApiClient,
     private val webView: PaymentWebView,
     private val callbackScheme: String

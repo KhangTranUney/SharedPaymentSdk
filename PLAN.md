@@ -124,23 +124,23 @@ actual class InHousePaymentSdk(
     clientId: String,
     baseUrl: String,
     callbackScheme: String = "myapp"
-) : PaymentSdk by impl { ... }
+) : PaymentSdk by delegate { ... }
 
 // iosMain — actual without Activity
 actual class InHousePaymentSdk(
     clientId: String,
     baseUrl: String,
     callbackScheme: String = "myapp"
-) : PaymentSdk by impl { ... }
+) : PaymentSdk by delegate { ... }
 ```
 
-Both actuals delegate all `PaymentSdk` methods to an `internal InHousePaymentSdkImpl` via Kotlin's `by` delegation. Zero duplication of business logic.
+Both actuals delegate all `PaymentSdk` methods to an `internal InHousePaymentSdkDelegate` via Kotlin's `by delegate` pattern. Zero duplication of business logic.
 
 ### 3b. Internal Components (hidden from caller)
 
 | Component | Visibility | Location | Role |
 |-----------|-----------|----------|------|
-| `InHousePaymentSdkImpl` | `internal` | `commonMain` | All business logic, delegated via `by impl` |
+| `InHousePaymentSdkDelegate` | `internal` | `commonMain` | All business logic, delegated via `by delegate` |
 | `PaymentApiClient` | `internal` | `commonMain` | Ktor HTTP client, sends `X-Client-Id` header |
 | `PaymentWebView` | `internal` | `expect/actual` | Opens system browser, waits for deep link callback |
 | `WebViewResult` | `internal` | `commonMain` | Sealed interface for browser result |
@@ -304,7 +304,7 @@ shared/src/
 │   │   └── CheckoutInfo.kt                          # internal
 │   └── inhouse/
 │       ├── InHousePaymentSdk.kt                     # expect class (public)
-│       ├── InHousePaymentSdkImpl.kt                 # internal delegate (all business logic)
+│       ├── InHousePaymentSdkDelegate.kt              # internal delegate (all business logic)
 │       ├── PaymentApiClient.kt                      # internal
 │       └── PaymentWebView.kt                        # internal expect
 │
@@ -337,7 +337,7 @@ iosApp/
 |----------|-----------|
 | **`sealed interface PurchaseResult`** | More flexible than sealed class. Uses `data object` for singletons. |
 | **`PaymentApiClient` + `PaymentWebView` are `internal`** | Caller only sees `InHousePaymentSdk(clientId, baseUrl)`. No leaking of HTTP client or browser details. |
-| **`expect/actual class` + `by impl` delegation** | `expect class` has no constructor → each `actual` defines platform-specific constructor. Both delegate to `internal InHousePaymentSdkImpl` via `by impl`. Zero business logic duplication. |
+| **`expect/actual class` + `by delegate`** | `expect class` has no constructor → each `actual` defines platform-specific constructor. Both delegate to `internal InHousePaymentSdkDelegate`. Zero business logic duplication. |
 | **`handleCallback()` on `InHousePaymentSdk`** | Delegates to internal `PaymentWebView`. Host app forwards deep links without knowing about the browser component. |
 | **CustomTabsIntent / SFSafariViewController** | System browser sandbox, visible URL bar, shared cookies. More secure than in-app WebView for payments. |
 | **`CompletableDeferred` bridging** | `purchase()` suspends. Deep link arrives asynchronously via `handleCallback()`. `CompletableDeferred` bridges the two. |
