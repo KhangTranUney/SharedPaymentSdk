@@ -52,8 +52,11 @@ class InHousePaymentSdk(
      *
      * @return true if the URL was handled by the SDK
      */
-    fun handleOpenURL(url: String): Boolean =
-        webView.handleOpenURL(url)
+    fun handleOpenURL(url: String): Boolean {
+        if (!url.startsWith("$callbackScheme://")) return false
+        webView.handleCallback(url)
+        return true
+    }
 
     /**
      * Android: call from onResume() with ~500ms delay.

@@ -14,7 +14,6 @@ internal actual class PaymentWebView actual constructor(
 ) {
 
     private var pendingResult: CompletableDeferred<WebViewResult>? = null
-    private var expectedScheme: String? = null
 
     actual suspend fun open(
         checkoutUrl: String,
@@ -23,7 +22,6 @@ internal actual class PaymentWebView actual constructor(
 
         val deferred = CompletableDeferred<WebViewResult>()
         pendingResult = deferred
-        expectedScheme = callbackScheme
 
         val customTabsIntent = CustomTabsIntent.Builder()
             .setShowTitle(true)
@@ -37,11 +35,10 @@ internal actual class PaymentWebView actual constructor(
         return deferred.await()
     }
 
-    actual fun handleOpenURL(url: String): Boolean {
+    actual fun handleCallback(url: String) {
         val uri = Uri.parse(url)
-        if (uri.scheme != expectedScheme) return false
-
         val params = mutableMapOf<String, String>()
+
         uri.queryParameterNames.forEach { key ->
             uri.getQueryParameter(key)?.let {
                 params[key] = it
@@ -52,7 +49,6 @@ internal actual class PaymentWebView actual constructor(
             WebViewResult.CallbackReceived(params)
         )
         pendingResult = null
-        return true
     }
 
     actual fun handleUserReturn() {

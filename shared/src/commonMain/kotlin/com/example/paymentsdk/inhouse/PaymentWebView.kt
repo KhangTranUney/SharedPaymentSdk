@@ -31,11 +31,7 @@ internal expect class PaymentWebView(context: PlatformContext) {
         callbackScheme: String
     ): WebViewResult
 
-    /**
-     * Forward an incoming URL. Returns true if the URL
-     * matched the expected callback scheme and was handled.
-     */
-    fun handleOpenURL(url: String): Boolean
+    fun handleCallback(url: String)
 
     /**
      * Detect user returning without completing payment.
