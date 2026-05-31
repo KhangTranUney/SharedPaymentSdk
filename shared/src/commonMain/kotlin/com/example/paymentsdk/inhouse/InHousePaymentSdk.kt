@@ -2,6 +2,9 @@ package com.example.paymentsdk.inhouse
 
 import com.example.paymentsdk.PaymentSdk
 import com.example.paymentsdk.PlatformContext
+import com.example.paymentsdk.models.Product
+import com.example.paymentsdk.models.PurchaseResult
+import com.example.paymentsdk.models.Transaction
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
@@ -21,30 +24,24 @@ import io.ktor.serialization.kotlinx.json.json
  * All internals (HTTP client, browser) are hidden.
  * Host app must forward deep links to [handleCallback].
  */
-class InHousePaymentSdk private constructor(
-    private val delegate: InHousePaymentSdkDelegate
-) : PaymentSdk by delegate {
+class InHousePaymentSdk(
+    context: PlatformContext,
+    clientId: String,
+    baseUrl: String,
+    private val callbackScheme: String = "myapp"
+) : PaymentSdk {
 
-    constructor(
-        context: PlatformContext,
-        clientId: String,
-        baseUrl: String,
-        callbackScheme: String = "myapp"
-    ) : this(
-        InHousePaymentSdkDelegate(
-            apiClient = PaymentApiClient(
-                baseUrl,
-                HttpClient {
-                    install(ContentNegotiation) { json() }
-                    defaultRequest {
-                        headers.append("X-Client-Id", clientId)
-                    }
-                }
-            ),
-            webView = PaymentWebView(context),
-            callbackScheme = callbackScheme
-        )
+    private val apiClient = PaymentApiClient(
+        baseUrl,
+        HttpClient {
+            install(ContentNegotiation) { json() }
+            defaultRequest {
+                headers.append("X-Client-Id", clientId)
+            }
+        }
     )
+
+    private val webView = PaymentWebView(context)
 
     /**
      * Forward deep link callbacks here.
@@ -52,12 +49,74 @@ class InHousePaymentSdk private constructor(
      * - iOS: call from .onOpenURL()
      */
     fun handleCallback(url: String) =
-        delegate.handleCallback(url)
+        webView.handleCallback(url)
 
     /**
      * Android: call from onResume() with ~500ms delay.
      * iOS: no-op (SFSafariVC delegate handles dismissal).
      */
     fun handleUserReturn() =
-        delegate.handleUserReturn()
+        webView.handleUserReturn()
+
+    // ---- PaymentSdk ----
+
+    override suspend fun getProducts(
+        productIds: List<String>
+    ): List<Product> {
+        return apiClient.fetchProducts(productIds)
+    }
+
+    override suspend fun purchase(
+        product: Product
+    ): PurchaseResult {
+
+        val returnUrl = "$callbackScheme://payment/callback"
+
+        val checkoutInfo = apiClient.createCheckout(
+            productId = product.productId,
+            returnUrl = returnUrl
+        )
+
+        val webViewResult = webView.open(
+            checkoutUrl = checkoutInfo.checkoutUrl,
+            callbackScheme = callbackScheme
+        )
+
+        return when (webViewResult) {
+
+            is WebViewResult.CallbackReceived -> {
+                val params = webViewResult.parameters
+                val status = params["status"]
+                val txId = params["transaction_id"]
+
+                when (status) {
+                    "success" -> PurchaseResult.Success(
+                        transactionId = txId ?: ""
+                    )
+                    "cancel" -> PurchaseResult.UserCanceled
+                    else -> PurchaseResult.Error(
+                        code = -1,
+                        message = params["error"]
+                            ?: "Payment failed"
+                    )
+                }
+            }
+
+            is WebViewResult.Dismissed -> {
+                PurchaseResult.UserCanceled
+            }
+        }
+    }
+
+    override suspend fun getTransactionResult(
+        transactionId: String
+    ): Transaction {
+        return apiClient.getTransaction(transactionId)
+    }
+
+    override suspend fun finishTransaction(
+        transactionId: String
+    ) {
+        apiClient.fulfillTransaction(transactionId)
+    }
 }

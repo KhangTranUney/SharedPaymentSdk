@@ -118,7 +118,7 @@ class InHousePaymentSdk(
     clientId: String,
     baseUrl: String,
     callbackScheme: String = "myapp"
-) : PaymentSdk by delegate {
+) : PaymentSdk {
 
     fun handleCallback(url: String)   // forward deep links here
     fun handleUserReturn()            // Android: call from onResume()
@@ -130,13 +130,10 @@ expect class PlatformContext
 // iosMain:     actual class PlatformContext
 ```
 
-Delegates all `PaymentSdk` methods to `internal InHousePaymentSdkDelegate` via `by delegate`. Zero duplication.
-
 ### 3b. Internal Components (hidden from caller)
 
 | Component | Visibility | Location | Role |
 |-----------|-----------|----------|------|
-| `InHousePaymentSdkDelegate` | `internal` | `commonMain` | All business logic, delegated via `by delegate` |
 | `PaymentApiClient` | `internal` | `commonMain` | Ktor HTTP client, sends `X-Client-Id` header |
 | `PaymentWebView` | `internal` | `expect/actual` | Opens system browser, takes `PlatformContext` |
 | `WebViewResult` | `internal` | `commonMain` | Sealed interface for browser result |
@@ -301,8 +298,7 @@ shared/src/
 │   │   ├── Transaction.kt                           # public
 │   │   └── CheckoutInfo.kt                          # internal
 │   └── inhouse/
-│       ├── InHousePaymentSdk.kt                     # public class (single, not expect/actual)
-│       ├── InHousePaymentSdkDelegate.kt             # internal delegate (all business logic)
+│       ├── InHousePaymentSdk.kt                     # public class
 │       ├── PaymentApiClient.kt                      # internal
 │       └── PaymentWebView.kt                        # internal expect
 │
@@ -337,7 +333,7 @@ iosApp/
 |----------|-----------|
 | **`sealed interface PurchaseResult`** | More flexible than sealed class. Uses `data object` for singletons. |
 | **`PaymentApiClient` + `PaymentWebView` are `internal`** | Caller only sees `InHousePaymentSdk(clientId, baseUrl)`. No leaking of HTTP client or browser details. |
-| **Single class + `PlatformContext`** | `InHousePaymentSdk` is one class in `commonMain` (not expect/actual). `expect class PlatformContext` abstracts the Android `Activity` dependency. `by delegate` pattern shares all business logic. |
+| **Single class + `PlatformContext`** | `InHousePaymentSdk` is one class in `commonMain` (not expect/actual). `expect class PlatformContext` abstracts the Android `Activity` dependency. All business logic in one place. |
 | **`handleCallback()` on `InHousePaymentSdk`** | Delegates to internal `PaymentWebView`. Host app forwards deep links without knowing about the browser component. |
 | **CustomTabsIntent / SFSafariViewController** | System browser sandbox, visible URL bar, shared cookies. More secure than in-app WebView for payments. |
 | **`CompletableDeferred` bridging** | `purchase()` suspends. Deep link arrives asynchronously via `handleCallback()`. `CompletableDeferred` bridges the two. |
