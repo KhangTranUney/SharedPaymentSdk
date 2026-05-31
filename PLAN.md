@@ -112,34 +112,35 @@ Fully in KMP. The caller passes `clientId` and `baseUrl` — the SDK internally 
 ### 3a. Public API
 
 ```kotlin
-// Constructor (Android — factory function in androidMain)
-fun InHousePaymentSdk(
+// commonMain — expect class, no constructor
+expect class InHousePaymentSdk : PaymentSdk {
+    fun handleCallback(url: String)   // forward deep links here
+    fun handleUserReturn()            // Android: call from onResume()
+}
+
+// androidMain — actual with Activity
+actual class InHousePaymentSdk(
     activity: Activity,
     clientId: String,
     baseUrl: String,
     callbackScheme: String = "myapp"
-): InHousePaymentSdk
+) : PaymentSdk by impl { ... }
 
-// Constructor (iOS — factory function in iosMain)
-fun InHousePaymentSdk(
+// iosMain — actual without Activity
+actual class InHousePaymentSdk(
     clientId: String,
     baseUrl: String,
     callbackScheme: String = "myapp"
-): InHousePaymentSdk
-
-// Class (commonMain — internal constructor)
-class InHousePaymentSdk : PaymentSdk {
-    // PaymentSdk interface methods...
-
-    fun handleCallback(url: String)   // forward deep links here
-    fun handleUserReturn()            // Android: call from onResume()
-}
+) : PaymentSdk by impl { ... }
 ```
+
+Both actuals delegate all `PaymentSdk` methods to an `internal InHousePaymentSdkImpl` via Kotlin's `by` delegation. Zero duplication of business logic.
 
 ### 3b. Internal Components (hidden from caller)
 
 | Component | Visibility | Location | Role |
 |-----------|-----------|----------|------|
+| `InHousePaymentSdkImpl` | `internal` | `commonMain` | All business logic, delegated via `by impl` |
 | `PaymentApiClient` | `internal` | `commonMain` | Ktor HTTP client, sends `X-Client-Id` header |
 | `PaymentWebView` | `internal` | `expect/actual` | Opens system browser, waits for deep link callback |
 | `WebViewResult` | `internal` | `commonMain` | Sealed interface for browser result |
@@ -302,17 +303,18 @@ shared/src/
 │   │   ├── Transaction.kt                           # public
 │   │   └── CheckoutInfo.kt                          # internal
 │   └── inhouse/
-│       ├── InHousePaymentSdk.kt                     # public (internal constructor)
+│       ├── InHousePaymentSdk.kt                     # expect class (public)
+│       ├── InHousePaymentSdkImpl.kt                 # internal delegate (all business logic)
 │       ├── PaymentApiClient.kt                      # internal
 │       └── PaymentWebView.kt                        # internal expect
 │
 ├── androidMain/kotlin/com/example/paymentsdk/inhouse/
-│   ├── PaymentWebView.kt                            # internal actual (CustomTabsIntent)
-│   └── InHousePaymentSdkFactory.kt                  # public factory(activity, clientId, baseUrl)
+│   ├── InHousePaymentSdk.kt                         # actual class(activity, clientId, baseUrl)
+│   └── PaymentWebView.kt                            # internal actual (CustomTabsIntent)
 │
 └── iosMain/kotlin/com/example/paymentsdk/inhouse/
-    ├── PaymentWebView.kt                            # internal actual (SFSafariViewController)
-    └── InHousePaymentSdkFactory.kt                  # public factory(clientId, baseUrl)
+    ├── InHousePaymentSdk.kt                         # actual class(clientId, baseUrl)
+    └── PaymentWebView.kt                            # internal actual (SFSafariViewController)
 
 androidApp/.../app/
 ├── sdkwrapper/NativePaymentSdk.kt                   # Google Play Billing wrapper
@@ -335,7 +337,7 @@ iosApp/
 |----------|-----------|
 | **`sealed interface PurchaseResult`** | More flexible than sealed class. Uses `data object` for singletons. |
 | **`PaymentApiClient` + `PaymentWebView` are `internal`** | Caller only sees `InHousePaymentSdk(clientId, baseUrl)`. No leaking of HTTP client or browser details. |
-| **Platform factory functions** | Android needs `Activity` for Custom Tabs; iOS doesn't. Factory functions in `androidMain`/`iosMain` handle this — `commonMain` constructor is `internal`. |
+| **`expect/actual class` + `by impl` delegation** | `expect class` has no constructor → each `actual` defines platform-specific constructor. Both delegate to `internal InHousePaymentSdkImpl` via `by impl`. Zero business logic duplication. |
 | **`handleCallback()` on `InHousePaymentSdk`** | Delegates to internal `PaymentWebView`. Host app forwards deep links without knowing about the browser component. |
 | **CustomTabsIntent / SFSafariViewController** | System browser sandbox, visible URL bar, shared cookies. More secure than in-app WebView for payments. |
 | **`CompletableDeferred` bridging** | `purchase()` suspends. Deep link arrives asynchronously via `handleCallback()`. `CompletableDeferred` bridges the two. |
