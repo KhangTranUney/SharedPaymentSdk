@@ -83,13 +83,4 @@ internal actual class PaymentWebView actual constructor(
         )
         pendingResult = null
     }
-
-    /**
-     * No-op on iOS — SFSafariViewController's delegate
-     * handles dismissal automatically via
-     * safariViewControllerDidFinish.
-     */
-    actual fun handleUserReturn() {
-        // no-op
-    }
 }

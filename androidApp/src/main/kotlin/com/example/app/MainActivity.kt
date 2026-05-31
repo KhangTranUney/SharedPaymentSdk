@@ -8,7 +8,6 @@ import androidx.lifecycle.lifecycleScope
 import com.example.app.sdkwrapper.NativePaymentSdk
 import com.example.paymentsdk.PaymentSdk
 import com.example.paymentsdk.inhouse.InHousePaymentSdk
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -45,15 +44,6 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         intent.data?.let { uri ->
             inHouseSdk?.handlePaymentCallback(uri.toString())
-        }
-    }
-
-    // Detect user returning without completing payment
-    override fun onResume() {
-        super.onResume()
-        lifecycleScope.launch {
-            delay(500)
-            inHouseSdk?.handleUserReturn()
         }
     }
 }

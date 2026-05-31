@@ -58,13 +58,6 @@ class InHousePaymentSdk(
         return true
     }
 
-    /**
-     * Android: call from onResume() with ~500ms delay.
-     * iOS: no-op (SFSafariVC delegate handles dismissal).
-     */
-    fun handleUserReturn() =
-        webView.handleUserReturn()
-
     // ---- PaymentSdk ----
 
     override suspend fun getProducts(

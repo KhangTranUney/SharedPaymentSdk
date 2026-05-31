@@ -32,11 +32,4 @@ internal expect class PaymentWebView(context: PlatformContext) {
     ): WebViewResult
 
     fun handleCallback(uri: String)
-
-    /**
-     * Detect user returning without completing payment.
-     * Android: called from onResume() with a delay.
-     * iOS: no-op (SFSafariVC delegate handles this).
-     */
-    fun handleUserReturn()
 }

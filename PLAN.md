@@ -120,8 +120,7 @@ class InHousePaymentSdk(
     callbackScheme: String = "myapp"
 ) : PaymentSdk {
 
-    fun handlePaymentCallback(url: String): Boolean  // forward URLs (SDK checks scheme)
-    fun handleUserReturn()                           // Android: call from onResume()
+    fun handlePaymentCallback(uri: String): Boolean   // forward URLs (SDK checks scheme)
 }
 
 // PlatformContext — the only expect/actual the caller sees
@@ -171,12 +170,9 @@ override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     intent.data?.let { sdk.handlePaymentCallback(it.toString()) }
 }
-
-override fun onResume() {
-    super.onResume()
-    lifecycleScope.launch { delay(500); sdk.handleUserReturn() }
-}
 ```
+
+Dismissal detection (user pressing back from Custom Tab) is handled internally by the SDK via a lifecycle observer.
 
 **iOS** — `Info.plist` URL scheme + `.onOpenURL`:
 
