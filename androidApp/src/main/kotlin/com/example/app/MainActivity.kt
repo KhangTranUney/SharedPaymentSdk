@@ -29,7 +29,7 @@ class MainActivity : ComponentActivity() {
             }
         } else {
             InHousePaymentSdk(
-                activity = this,
+                context = this,
                 clientId = "your-company-id",
                 baseUrl = "https://api.example.com"
             ).also { inHouseSdk = it }

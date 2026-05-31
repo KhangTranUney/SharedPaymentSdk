@@ -1,5 +1,7 @@
 package com.example.paymentsdk.inhouse
 
+import com.example.paymentsdk.PlatformContext
+
 /**
  * Result of a browser checkout session.
  */
@@ -22,7 +24,7 @@ internal sealed interface WebViewResult {
  * Deep link callbacks are forwarded via
  * [InHousePaymentSdk.handleCallback].
  */
-internal expect class PaymentWebView {
+internal expect class PaymentWebView(context: PlatformContext) {
 
     suspend fun open(
         checkoutUrl: String,

@@ -34,7 +34,7 @@ A Kotlin Multiplatform payment SDK with two tracks: **native store billing** (Go
 | **Lives in** | App layer (`sdkwrapper/`) | KMP shared module |
 | **Checkout UI** | OS payment sheet | CustomTabsIntent / SFSafariViewController |
 | **Internals hidden?** | N/A (platform SDK) | Yes — `PaymentApiClient` and `PaymentWebView` are `internal` |
-| **Constructor** | `NativePaymentSdk(activity)` | `InHousePaymentSdk(activity, clientId, baseUrl)` / `InHousePaymentSdk(clientId, baseUrl)` |
+| **Constructor** | `NativePaymentSdk(activity)` | `InHousePaymentSdk(context, clientId, baseUrl)` — single class in `commonMain` |
 
 **Caller flow is identical for both tracks:**
 
@@ -107,34 +107,30 @@ interface PaymentSdk {
 
 ## 3. InHousePaymentSdk (KMP shared module)
 
-Fully in KMP. The caller passes `clientId` and `baseUrl` — the SDK internally creates `PaymentApiClient` (Ktor) and `PaymentWebView` (expect/actual), both `internal`.
+Fully in KMP. Single class in `commonMain` — no `expect/actual` needed for `InHousePaymentSdk` itself. Platform differences are handled by `expect/actual PlatformContext` and `expect/actual PaymentWebView` (both internal).
 
 ### 3a. Public API
 
 ```kotlin
-// commonMain — expect class, no constructor
-expect class InHousePaymentSdk : PaymentSdk {
+// commonMain — single class, not expect/actual
+class InHousePaymentSdk(
+    context: PlatformContext,     // Android = Activity, iOS = empty class
+    clientId: String,
+    baseUrl: String,
+    callbackScheme: String = "myapp"
+) : PaymentSdk by delegate {
+
     fun handleCallback(url: String)   // forward deep links here
     fun handleUserReturn()            // Android: call from onResume()
 }
 
-// androidMain — actual with Activity
-actual class InHousePaymentSdk(
-    activity: Activity,
-    clientId: String,
-    baseUrl: String,
-    callbackScheme: String = "myapp"
-) : PaymentSdk by delegate { ... }
-
-// iosMain — actual without Activity
-actual class InHousePaymentSdk(
-    clientId: String,
-    baseUrl: String,
-    callbackScheme: String = "myapp"
-) : PaymentSdk by delegate { ... }
+// PlatformContext — the only expect/actual the caller sees
+expect class PlatformContext
+// androidMain: actual typealias PlatformContext = Activity
+// iosMain:     actual class PlatformContext
 ```
 
-Both actuals delegate all `PaymentSdk` methods to an `internal InHousePaymentSdkDelegate` via Kotlin's `by delegate` pattern. Zero duplication of business logic.
+Delegates all `PaymentSdk` methods to `internal InHousePaymentSdkDelegate` via `by delegate`. Zero duplication.
 
 ### 3b. Internal Components (hidden from caller)
 
@@ -142,7 +138,7 @@ Both actuals delegate all `PaymentSdk` methods to an `internal InHousePaymentSdk
 |-----------|-----------|----------|------|
 | `InHousePaymentSdkDelegate` | `internal` | `commonMain` | All business logic, delegated via `by delegate` |
 | `PaymentApiClient` | `internal` | `commonMain` | Ktor HTTP client, sends `X-Client-Id` header |
-| `PaymentWebView` | `internal` | `expect/actual` | Opens system browser, waits for deep link callback |
+| `PaymentWebView` | `internal` | `expect/actual` | Opens system browser, takes `PlatformContext` |
 | `WebViewResult` | `internal` | `commonMain` | Sealed interface for browser result |
 | `CheckoutInfo` | `internal` | `commonMain` | Checkout URL + session from backend |
 
@@ -240,7 +236,7 @@ val paymentSdk: PaymentSdk = if (useNativeStore) {
     NativePaymentSdk(this)
 } else {
     InHousePaymentSdk(
-        activity = this,
+        context = this,
         clientId = "your-company-id",
         baseUrl = "https://api.example.com"
     )
@@ -270,6 +266,7 @@ class CheckoutViewModel(private val sdk: PaymentSdk) : ViewModel() {
 let paymentSdk: PaymentSdk = useNativeStore
     ? NativePaymentSdk()
     : InHousePaymentSdk(
+          context: PlatformContext(),
           clientId: "your-company-id",
           baseUrl: "https://api.example.com"
       )
@@ -297,24 +294,27 @@ func onBuyClicked(product: Product) {
 shared/src/
 ├── commonMain/kotlin/com/example/paymentsdk/
 │   ├── PaymentSdk.kt                                # public interface
+│   ├── PlatformContext.kt                           # expect class
 │   ├── models/
 │   │   ├── Product.kt                               # public
 │   │   ├── PurchaseResult.kt                        # public sealed interface
 │   │   ├── Transaction.kt                           # public
 │   │   └── CheckoutInfo.kt                          # internal
 │   └── inhouse/
-│       ├── InHousePaymentSdk.kt                     # expect class (public)
-│       ├── InHousePaymentSdkDelegate.kt              # internal delegate (all business logic)
+│       ├── InHousePaymentSdk.kt                     # public class (single, not expect/actual)
+│       ├── InHousePaymentSdkDelegate.kt             # internal delegate (all business logic)
 │       ├── PaymentApiClient.kt                      # internal
 │       └── PaymentWebView.kt                        # internal expect
 │
-├── androidMain/kotlin/com/example/paymentsdk/inhouse/
-│   ├── InHousePaymentSdk.kt                         # actual class(activity, clientId, baseUrl)
-│   └── PaymentWebView.kt                            # internal actual (CustomTabsIntent)
+├── androidMain/kotlin/com/example/paymentsdk/
+│   ├── PlatformContext.kt                           # actual typealias = Activity
+│   └── inhouse/
+│       └── PaymentWebView.kt                        # internal actual (CustomTabsIntent)
 │
-└── iosMain/kotlin/com/example/paymentsdk/inhouse/
-    ├── InHousePaymentSdk.kt                         # actual class(clientId, baseUrl)
-    └── PaymentWebView.kt                            # internal actual (SFSafariViewController)
+└── iosMain/kotlin/com/example/paymentsdk/
+    ├── PlatformContext.kt                           # actual class (empty)
+    └── inhouse/
+        └── PaymentWebView.kt                        # internal actual (SFSafariViewController)
 
 androidApp/.../app/
 ├── sdkwrapper/NativePaymentSdk.kt                   # Google Play Billing wrapper
@@ -337,7 +337,7 @@ iosApp/
 |----------|-----------|
 | **`sealed interface PurchaseResult`** | More flexible than sealed class. Uses `data object` for singletons. |
 | **`PaymentApiClient` + `PaymentWebView` are `internal`** | Caller only sees `InHousePaymentSdk(clientId, baseUrl)`. No leaking of HTTP client or browser details. |
-| **`expect/actual class` + `by delegate`** | `expect class` has no constructor → each `actual` defines platform-specific constructor. Both delegate to `internal InHousePaymentSdkDelegate`. Zero business logic duplication. |
+| **Single class + `PlatformContext`** | `InHousePaymentSdk` is one class in `commonMain` (not expect/actual). `expect class PlatformContext` abstracts the Android `Activity` dependency. `by delegate` pattern shares all business logic. |
 | **`handleCallback()` on `InHousePaymentSdk`** | Delegates to internal `PaymentWebView`. Host app forwards deep links without knowing about the browser component. |
 | **CustomTabsIntent / SFSafariViewController** | System browser sandbox, visible URL bar, shared cookies. More secure than in-app WebView for payments. |
 | **`CompletableDeferred` bridging** | `purchase()` suspends. Deep link arrives asynchronously via `handleCallback()`. `CompletableDeferred` bridges the two. |

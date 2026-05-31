@@ -15,6 +15,7 @@ struct PaymentApp: App {
             inHouseSdk = nil
         } else {
             let sdk = InHousePaymentSdk(
+                context: PlatformContext(),
                 clientId: "your-company-id",
                 baseUrl: "https://api.example.com"
             )

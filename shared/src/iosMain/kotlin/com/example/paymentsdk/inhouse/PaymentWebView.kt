@@ -1,5 +1,6 @@
 package com.example.paymentsdk.inhouse
 
+import com.example.paymentsdk.PlatformContext
 import kotlinx.coroutines.CompletableDeferred
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLComponents
@@ -14,7 +15,10 @@ import platform.darwin.NSObject
  * iOS actual: presents an SFSafariViewController.
  * Internal — callers interact via [InHousePaymentSdk].
  */
-internal actual class PaymentWebView {
+@Suppress("UNUSED_PARAMETER")
+internal actual class PaymentWebView actual constructor(
+    context: PlatformContext
+) {
 
     private var pendingResult: CompletableDeferred<WebViewResult>? = null
     private var safariVC: SFSafariViewController? = null

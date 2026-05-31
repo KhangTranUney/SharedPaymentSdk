@@ -1,16 +1,16 @@
 package com.example.paymentsdk.inhouse
 
-import android.app.Activity
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
+import com.example.paymentsdk.PlatformContext
 import kotlinx.coroutines.CompletableDeferred
 
 /**
  * Android actual: launches a Chrome Custom Tab.
  * Internal — callers interact via [InHousePaymentSdk].
  */
-internal actual class PaymentWebView(
-    private val activity: Activity
+internal actual class PaymentWebView actual constructor(
+    private val context: PlatformContext
 ) {
 
     private var pendingResult: CompletableDeferred<WebViewResult>? = null
@@ -28,7 +28,7 @@ internal actual class PaymentWebView(
             .build()
 
         customTabsIntent.launchUrl(
-            activity,
+            context,
             Uri.parse(checkoutUrl)
         )
 
