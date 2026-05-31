@@ -1,19 +1,22 @@
 package com.example.paymentsdk.inhouse
 
-import android.net.Uri
-import androidx.browser.customtabs.CustomTabsIntent
+import android.content.Intent
 import com.example.paymentsdk.PlatformContext
 import kotlinx.coroutines.CompletableDeferred
 
 /**
- * Android actual: launches a Chrome Custom Tab.
- * Internal — callers interact via [InHousePaymentSdk].
+ * Android actual: delegates to [PaymentBrowserActivity] which
+ * launches a Custom Tab and [PaymentRedirectActivity] which
+ * receives the callback. Fully self-contained — the caller
+ * never handles deep links.
  */
 internal actual class PaymentWebView actual constructor(
     private val context: PlatformContext
 ) {
 
-    private var pendingResult: CompletableDeferred<WebViewResult>? = null
+    companion object {
+        internal var pendingResult: CompletableDeferred<WebViewResult>? = null
+    }
 
     actual suspend fun open(
         checkoutUrl: String,
@@ -23,40 +26,15 @@ internal actual class PaymentWebView actual constructor(
         val deferred = CompletableDeferred<WebViewResult>()
         pendingResult = deferred
 
-        val customTabsIntent = CustomTabsIntent.Builder()
-            .setShowTitle(true)
-            .build()
-
-        customTabsIntent.launchUrl(
-            context,
-            Uri.parse(checkoutUrl)
-        )
+        val intent = Intent(context, PaymentBrowserActivity::class.java)
+        intent.putExtra(PaymentBrowserActivity.EXTRA_CHECKOUT_URL, checkoutUrl)
+        context.startActivity(intent)
 
         return deferred.await()
     }
 
-    actual fun handleCallback(url: String) {
-        val uri = Uri.parse(url)
-        val params = mutableMapOf<String, String>()
-
-        uri.queryParameterNames.forEach { key ->
-            uri.getQueryParameter(key)?.let {
-                params[key] = it
-            }
-        }
-
-        pendingResult?.complete(
-            WebViewResult.CallbackReceived(params)
-        )
-        pendingResult = null
-    }
-
-    actual fun handleUserReturn() {
-        val pending = pendingResult ?: return
-
-        if (!pending.isCompleted) {
-            pending.complete(WebViewResult.Dismissed)
-            pendingResult = null
-        }
+    actual fun handleOpenURL(url: String): Boolean {
+        // On Android, PaymentRedirectActivity handles this
+        return false
     }
 }

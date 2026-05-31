@@ -120,8 +120,7 @@ class InHousePaymentSdk(
     callbackScheme: String = "myapp"
 ) : PaymentSdk {
 
-    fun handleCallback(url: String)   // forward deep links here
-    fun handleUserReturn()            // Android: call from onResume()
+    fun handleOpenURL(url: String): Boolean  // iOS only
 }
 
 // PlatformContext — the only expect/actual the caller sees
@@ -136,51 +135,57 @@ expect class PlatformContext
 |-----------|-----------|----------|------|
 | `PaymentApiClient` | `internal` | `commonMain` | Ktor HTTP client, sends `X-Client-Id` header |
 | `PaymentWebView` | `internal` | `expect/actual` | Opens system browser, takes `PlatformContext` |
+| `PaymentBrowserActivity` | `internal` | `androidMain` | Transparent Activity: launches Custom Tab, detects back press |
+| `PaymentRedirectActivity` | `internal` | `androidMain` | Transparent Activity: receives redirect deep link |
 | `WebViewResult` | `internal` | `commonMain` | Sealed interface for browser result |
 | `CheckoutInfo` | `internal` | `commonMain` | Checkout URL + session from backend |
 
 ### 3c. Deep Link Flow
 
+**Android (fully internal — no caller code needed):**
+
 ```
-purchase() called
+purchase()
     → SDK calls POST /api/checkout → gets checkoutUrl
-    → SDK opens CustomTabsIntent / SFSafariViewController
+    → SDK launches PaymentBrowserActivity (transparent)
+    → PaymentBrowserActivity opens Custom Tab
     → User pays on Stripe/PayPal page
-    → Gateway redirects to myapp://payment/callback?status=success&transaction_id=123
-    → OS routes deep link to app
-    → Host app calls sdk.handleCallback(url)
-    → SDK parses params, resumes purchase()
-    → Returns PurchaseResult.Success(transactionId)
+    → Gateway redirects to myapp://payment/callback?...
+    → OS launches PaymentRedirectActivity (intent filter)
+    → PaymentRedirectActivity parses params, completes deferred, finishes
+    → PaymentBrowserActivity.onResume() → finishes
+    → purchase() resumes with PurchaseResult
+```
+
+**iOS (caller only forwards URLs — no scheme comparison):**
+
+```
+purchase()
+    → SDK calls POST /api/checkout → gets checkoutUrl
+    → SDK presents SFSafariViewController
+    → User pays on Stripe/PayPal page
+    → Gateway redirects to myapp://payment/callback?...
+    → OS delivers URL to .onOpenURL
+    → Caller calls sdk.handleOpenURL(url)
+    → SDK checks scheme internally, parses params, dismisses Safari
+    → purchase() resumes with PurchaseResult
 ```
 
 ### 3d. Host App Setup
 
-**Android** — `AndroidManifest.xml` intent filter + `onNewIntent`/`onResume`:
+**Android** — no code needed. The SDK's `AndroidManifest.xml` declares the internal activities with the intent filter. It is merged automatically.
 
-```xml
-<intent-filter>
-    <action android:name="android.intent.action.VIEW" />
-    <category android:name="android.intent.category.DEFAULT" />
-    <category android:name="android.intent.category.BROWSABLE" />
-    <data android:scheme="myapp" android:host="payment" android:pathPrefix="/callback" />
-</intent-filter>
-```
+To customize the callback scheme, set `manifestPlaceholders` in your app's `build.gradle`:
 
-```kotlin
-override fun onNewIntent(intent: Intent) {
-    super.onNewIntent(intent)
-    intent.data?.let { uri ->
-        if (uri.scheme == "myapp") sdk.handleCallback(uri.toString())
+```groovy
+android {
+    defaultConfig {
+        manifestPlaceholders = [paymentCallbackScheme: "myapp"]
     }
 }
-
-override fun onResume() {
-    super.onResume()
-    lifecycleScope.launch { delay(500); sdk.handleUserReturn() }
-}
 ```
 
-**iOS** — `Info.plist` URL scheme + `.onOpenURL`:
+**iOS** — register URL scheme in `Info.plist` + forward URLs:
 
 ```xml
 <key>CFBundleURLTypes</key>
@@ -192,9 +197,7 @@ override fun onResume() {
 
 ```swift
 .onOpenURL { url in
-    if url.scheme == "myapp" {
-        sdk.handleCallback(url: url.absoluteString)
-    }
+    sdk.handleOpenURL(url: url.absoluteString)
 }
 ```
 
@@ -232,12 +235,9 @@ The ViewModel programs against `PaymentSdk` — the same code works for both tra
 val paymentSdk: PaymentSdk = if (useNativeStore) {
     NativePaymentSdk(this)
 } else {
-    InHousePaymentSdk(
-        context = this,
-        clientId = "your-company-id",
-        baseUrl = "https://api.example.com"
-    )
+    InHousePaymentSdk(this, "your-company-id", "https://api.example.com")
 }
+// No deep link handling needed — SDK handles it internally
 
 // ViewModel — identical for both tracks
 class CheckoutViewModel(private val sdk: PaymentSdk) : ViewModel() {
@@ -260,13 +260,15 @@ class CheckoutViewModel(private val sdk: PaymentSdk) : ViewModel() {
 
 ```swift
 // Choose track
-let paymentSdk: PaymentSdk = useNativeStore
-    ? NativePaymentSdk()
-    : InHousePaymentSdk(
-          context: PlatformContext(),
-          clientId: "your-company-id",
-          baseUrl: "https://api.example.com"
-      )
+let sdk = InHousePaymentSdk(
+    context: PlatformContext(),
+    clientId: "your-company-id",
+    baseUrl: "https://api.example.com"
+)
+let paymentSdk: PaymentSdk = useNativeStore ? NativePaymentSdk() : sdk
+
+// Forward URLs (no scheme comparison — SDK handles it)
+// .onOpenURL { url in sdk.handleOpenURL(url: url.absoluteString) }
 
 // ViewModel — identical for both tracks
 func onBuyClicked(product: Product) {
@@ -302,10 +304,14 @@ shared/src/
 │       ├── PaymentApiClient.kt                      # internal
 │       └── PaymentWebView.kt                        # internal expect
 │
-├── androidMain/kotlin/com/example/paymentsdk/
-│   ├── PlatformContext.kt                           # actual typealias = Activity
-│   └── inhouse/
-│       └── PaymentWebView.kt                        # internal actual (CustomTabsIntent)
+├── androidMain/
+│   ├── AndroidManifest.xml                          # declares internal activities + intent filter
+│   └── kotlin/com/example/paymentsdk/
+│       ├── PlatformContext.kt                       # actual typealias = Activity
+│       └── inhouse/
+│           ├── PaymentWebView.kt                    # internal actual (companion deferred)
+│           ├── PaymentBrowserActivity.kt            # internal (transparent, launches Custom Tab)
+│           └── PaymentRedirectActivity.kt           # internal (transparent, receives redirect)
 │
 └── iosMain/kotlin/com/example/paymentsdk/
     ├── PlatformContext.kt                           # actual class (empty)
@@ -334,7 +340,8 @@ iosApp/
 | **`sealed interface PurchaseResult`** | More flexible than sealed class. Uses `data object` for singletons. |
 | **`PaymentApiClient` + `PaymentWebView` are `internal`** | Caller only sees `InHousePaymentSdk(clientId, baseUrl)`. No leaking of HTTP client or browser details. |
 | **Single class + `PlatformContext`** | `InHousePaymentSdk` is one class in `commonMain` (not expect/actual). `expect class PlatformContext` abstracts the Android `Activity` dependency. All business logic in one place. |
-| **`handleCallback()` on `InHousePaymentSdk`** | Delegates to internal `PaymentWebView`. Host app forwards deep links without knowing about the browser component. |
+| **Android: transparent Activity pair** | `PaymentBrowserActivity` launches Custom Tab + detects back press. `PaymentRedirectActivity` receives deep link. Caller writes zero deep link code. |
+| **iOS: `handleOpenURL()` hides scheme check** | Caller just forwards all URLs — SDK checks the scheme internally. |
 | **CustomTabsIntent / SFSafariViewController** | System browser sandbox, visible URL bar, shared cookies. More secure than in-app WebView for payments. |
-| **`CompletableDeferred` bridging** | `purchase()` suspends. Deep link arrives asynchronously via `handleCallback()`. `CompletableDeferred` bridges the two. |
+| **`CompletableDeferred` bridging** | `purchase()` suspends. Deep link completes the deferred (Android: via redirect Activity, iOS: via `handleOpenURL`). |
 | **NativePaymentSdk in app layer** | StoreKit 2 is Swift-only, Google Play Billing is Android-only. Cannot be KMP-ified. |

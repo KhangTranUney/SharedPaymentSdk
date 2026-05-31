@@ -21,8 +21,9 @@ import io.ktor.serialization.kotlinx.json.json
  * val sdk = InHousePaymentSdk(PlatformContext(), "client-id", "https://api.example.com")
  * ```
  *
- * All internals (HTTP client, browser) are hidden.
- * Host app must forward deep links to [handleCallback].
+ * Deep link handling:
+ * - Android: fully internal (transparent Activity handles redirect)
+ * - iOS: caller must forward URLs via [handleOpenURL] from .onOpenURL
  */
 class InHousePaymentSdk(
     context: PlatformContext,
@@ -44,19 +45,15 @@ class InHousePaymentSdk(
     private val webView = PaymentWebView(context)
 
     /**
-     * Forward deep link callbacks here.
-     * - Android: call from onNewIntent()
-     * - iOS: call from .onOpenURL()
+     * Forward an incoming URL to the SDK.
+     *
+     * - iOS: call from `.onOpenURL { sdk.handleOpenURL(url) }`
+     * - Android: not needed (handled internally)
+     *
+     * @return true if the URL was handled by the SDK
      */
-    fun handleCallback(url: String) =
-        webView.handleCallback(url)
-
-    /**
-     * Android: call from onResume() with ~500ms delay.
-     * iOS: no-op (SFSafariVC delegate handles dismissal).
-     */
-    fun handleUserReturn() =
-        webView.handleUserReturn()
+    fun handleOpenURL(url: String): Boolean =
+        webView.handleOpenURL(url)
 
     // ---- PaymentSdk ----
 
