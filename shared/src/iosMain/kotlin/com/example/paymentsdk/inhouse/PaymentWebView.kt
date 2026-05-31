@@ -13,8 +13,7 @@ import platform.darwin.NSObject
 
 /**
  * iOS actual: presents an SFSafariViewController.
- * Scheme comparison is handled internally — the caller
- * just forwards all URLs via [handleOpenURL].
+ * Internal — callers interact via [InHousePaymentSdk].
  */
 @Suppress("UNUSED_PARAMETER")
 internal actual class PaymentWebView actual constructor(
@@ -23,7 +22,6 @@ internal actual class PaymentWebView actual constructor(
 
     private var pendingResult: CompletableDeferred<WebViewResult>? = null
     private var safariVC: SFSafariViewController? = null
-    private var expectedScheme: String? = null
 
     actual suspend fun open(
         checkoutUrl: String,
@@ -32,7 +30,6 @@ internal actual class PaymentWebView actual constructor(
 
         val deferred = CompletableDeferred<WebViewResult>()
         pendingResult = deferred
-        expectedScheme = callbackScheme
 
         val url = NSURL.URLWithString(checkoutUrl)!!
         val safari = SFSafariViewController(uRL = url)
@@ -67,11 +64,8 @@ internal actual class PaymentWebView actual constructor(
         return deferred.await()
     }
 
-    actual fun handleOpenURL(url: String): Boolean {
-        val nsUrl = NSURL.URLWithString(url) ?: return false
-
-        // Check if this URL matches our expected scheme
-        if (nsUrl.scheme != expectedScheme) return false
+    actual fun handleCallback(url: String) {
+        val nsUrl = NSURL.URLWithString(url) ?: return
 
         val components = NSURLComponents
             .componentsWithURL(nsUrl, true)
@@ -88,7 +82,14 @@ internal actual class PaymentWebView actual constructor(
             WebViewResult.CallbackReceived(params)
         )
         pendingResult = null
+    }
 
-        return true
+    /**
+     * No-op on iOS — SFSafariViewController's delegate
+     * handles dismissal automatically via
+     * safariViewControllerDidFinish.
+     */
+    actual fun handleUserReturn() {
+        // no-op
     }
 }

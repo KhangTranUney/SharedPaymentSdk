@@ -28,7 +28,11 @@ struct PaymentApp: App {
         WindowGroup {
             CheckoutView(paymentSdk: paymentSdk)
                 .onOpenURL { url in
-                    inHouseSdk?.handleOpenURL(url: url.absoluteString)
+                    if url.scheme == "myapp" {
+                        inHouseSdk?.handleCallback(
+                            url: url.absoluteString
+                        )
+                    }
                 }
         }
     }

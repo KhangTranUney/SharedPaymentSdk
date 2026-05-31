@@ -17,12 +17,12 @@ internal sealed interface WebViewResult {
 /**
  * Platform-specific browser for checkout.
  *
- * - Android: CustomTabsIntent via transparent Activity
- *   (fully self-contained, no caller wiring needed)
+ * - Android: CustomTabsIntent (Chrome Custom Tab)
  * - iOS: SFSafariViewController
- *   (caller forwards URLs via [handleOpenURL])
  *
- * Internal to the SDK.
+ * Internal to the SDK — callers never see this class.
+ * Deep link callbacks are forwarded via
+ * [InHousePaymentSdk.handleCallback].
  */
 internal expect class PaymentWebView(context: PlatformContext) {
 
@@ -31,10 +31,12 @@ internal expect class PaymentWebView(context: PlatformContext) {
         callbackScheme: String
     ): WebViewResult
 
+    fun handleCallback(url: String)
+
     /**
-     * Forward an incoming URL to the SDK.
-     * - Android: returns false (handled internally)
-     * - iOS: checks scheme, completes deferred, returns true if handled
+     * Detect user returning without completing payment.
+     * Android: called from onResume() with a delay.
+     * iOS: no-op (SFSafariVC delegate handles this).
      */
-    fun handleOpenURL(url: String): Boolean
+    fun handleUserReturn()
 }
