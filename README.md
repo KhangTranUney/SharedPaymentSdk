@@ -138,19 +138,53 @@ expect class PlatformContext
 | `WebViewResult` | `internal` | `commonMain` | Sealed interface for browser result |
 | `CheckoutInfo` | `internal` | `commonMain` | Checkout URL + session from backend |
 
-### 3c. Deep Link Flow
+### 3c. Sequence Diagram
 
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant App as Host App
+    participant SDK as InHousePaymentSdk
+    participant API as PaymentApiClient
+    participant Web as PaymentWebView<br/>(CustomTabs / SFSafariVC)
+    participant GW as Payment Gateway<br/>(Stripe / PayPal)
+    participant BE as Backend
+
+    App->>SDK: getProducts(ids)
+    SDK->>API: GET /api/products?ids=...
+    API->>BE: HTTP GET (X-Client-Id)
+    BE-->>API: [Product]
+    API-->>SDK: [Product]
+    SDK-->>App: [Product]
+
+    User->>App: tap Buy
+    App->>SDK: purchase(product)
+    SDK->>API: POST /api/checkout {productId, returnUrl}
+    API->>BE: HTTP POST
+    BE-->>API: {checkoutUrl, sessionId}
+    API-->>SDK: CheckoutInfo
+    SDK->>Web: open(checkoutUrl)
+    Web->>GW: load checkout page
+    User->>GW: enter payment details
+    GW-->>Web: redirect myapp://payment/callback?status=success&transaction_id=123
+    Web-->>App: OS routes deep link
+    App->>SDK: handlePaymentCallback(uri)
+    Note over SDK: SDK verifies scheme matches callbackScheme,<br/>parses params, resumes suspended purchase()
+    SDK-->>App: PurchaseResult.Success(transactionId)
+
+    App->>SDK: getTransactionResult(id)
+    SDK->>API: GET /api/transactions/{id}
+    API-->>SDK: Transaction
+    SDK-->>App: Transaction
+
+    App->>SDK: finishTransaction(id)
+    SDK->>API: POST /api/transactions/{id}/fulfill
+    API-->>SDK: {ok}
+    SDK-->>App: Unit
 ```
-purchase() called
-    → SDK calls POST /api/checkout → gets checkoutUrl
-    → SDK opens CustomTabsIntent / SFSafariViewController
-    → User pays on Stripe/PayPal page
-    → Gateway redirects to myapp://payment/callback?status=success&transaction_id=123
-    → OS routes deep link to app
-    → Host app calls sdk.handlePaymentCallback(url) — SDK checks scheme
-    → SDK parses params, resumes purchase()
-    → Returns PurchaseResult.Success(transactionId)
-```
+
+**Cancellation path:** if the user dismisses the Custom Tab / SFSafariViewController without completing payment, the SDK's lifecycle observer detects the dismissal and resumes `purchase()` with `PurchaseResult.UserCanceled`.
 
 ### 3d. Host App Setup
 
@@ -210,6 +244,50 @@ Lives in each platform's app module because the store SDKs cannot be abstracted 
 - **iOS:** StoreKit 2 is Swift-only (no Kotlin/Native interop)
 
 Both implement `PaymentSdk`. See prototype code for full implementation.
+
+### 4a. Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant App as Host App
+    participant SDK as NativePaymentSdk
+    participant Store as Google Play Billing /<br/>StoreKit 2
+    participant Backend as Your Backend<br/>(catalog + receipt verification)
+
+    App->>SDK: getProducts(ids)
+    SDK->>Store: queryProductDetails(ids) /<br/>Product.products(for:)
+    Store-->>SDK: ProductDetails / Product
+    SDK-->>App: [Product] (mapped from store)
+
+    opt Enrich catalog from backend
+        App->>Backend: GET /api/products?ids=...
+        Backend-->>App: [Product] (server metadata:<br/>images, descriptions, badges, ...)
+        Note over App: Merge store products (price, currency,<br/>productId — source of truth) with<br/>backend products (display metadata)<br/>before rendering UI
+    end
+
+    User->>App: tap Buy
+    App->>SDK: purchase(product)
+    SDK->>Store: launchBillingFlow(activity) /<br/>product.purchase()
+    Store->>User: show OS payment sheet
+    User->>Store: confirm payment
+    Store-->>SDK: Purchase / Transaction (with receipt)
+    SDK-->>App: PurchaseResult.Success(transactionId)
+
+    App->>SDK: getTransactionResult(id)
+    Note over SDK: Optionally POST receipt to backend<br/>for server-side verification
+    SDK->>Backend: verify(receiptToken)
+    Backend-->>SDK: verified Transaction
+    SDK-->>App: Transaction
+
+    App->>SDK: finishTransaction(id)
+    SDK->>Store: acknowledgePurchase / consumePurchase /<br/>Transaction.finish()
+    Store-->>SDK: ack
+    SDK-->>App: Unit
+```
+
+**Cancellation path:** if the user dismisses the OS payment sheet, the store SDK returns a `USER_CANCELED` result, which `NativePaymentSdk` maps to `PurchaseResult.UserCanceled`.
 
 ---
 
