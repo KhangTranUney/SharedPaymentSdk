@@ -22,7 +22,7 @@ sealed interface CheckoutUiState {
  * ViewModel that drives the checkout Composable.
  *
  * Programs against [PaymentSdk] — the same code works
- * for both NativePaymentSdk and InHousePaymentSdk.
+ * for both StorePaymentSdk and InHousePaymentSdk.
  *
  * Flow:
  * 1. loadProducts()    -> getProducts()
@@ -60,9 +60,7 @@ class CheckoutViewModel(
                 is PurchaseResult.Success -> {
                     _uiState.value = CheckoutUiState.Verifying
 
-                    val tx = paymentSdk.getTransactionResult(
-                        result.transactionId
-                    )
+                    val tx = paymentSdk.getTransactionResult(result)
 
                     if (tx.status == TransactionStatus.COMPLETED ||
                         tx.status == TransactionStatus.VERIFIED

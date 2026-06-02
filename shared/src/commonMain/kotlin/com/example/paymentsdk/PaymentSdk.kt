@@ -7,7 +7,7 @@ import com.example.paymentsdk.models.Transaction
 /**
  * Unified payment interface.
  *
- * Both NativePaymentSdk and InHousePaymentSdk implement
+ * Both StorePaymentSdk and InHousePaymentSdk implement
  * this contract. The host app's ViewModel programs against
  * this interface — it does not know which track is active.
  *
@@ -21,16 +21,15 @@ import com.example.paymentsdk.models.Transaction
 interface PaymentSdk {
 
     /**
-     * Fetch available products for display.
+     * Fetch product display details for the given ids.
      *
-     * @param productIds optional list of product ids to fetch.
-     *   - InHousePaymentSdk: when null, the backend returns
-     *     the full catalog for this client.
-     *   - NativePaymentSdk: required (store APIs need ids).
-     *     Returns an empty list when null.
+     * The host app is expected to fetch its product catalog
+     * (ids + any local metadata) from its own backend first,
+     * then pass the ids here. Both tracks require explicit
+     * ids — no "list all" API is supported.
      */
     suspend fun getProducts(
-        productIds: List<String>? = null
+        productIds: List<String>
     ): List<Product>
 
     /**
@@ -38,7 +37,7 @@ interface PaymentSdk {
      * Suspends until the user completes, cancels, or an
      * error occurs.
      *
-     * - NativePaymentSdk: launches OS payment sheet
+     * - StorePaymentSdk: launches OS payment sheet
      * - InHousePaymentSdk: opens WebView with checkout URL,
      *   intercepts callback, closes WebView — all handled
      *   internally by the SDK
@@ -49,14 +48,17 @@ interface PaymentSdk {
      * Get the final transaction result after purchase, and
      * acknowledge it with the underlying provider.
      *
-     * - NativePaymentSdk: queries the store, then calls
-     *   `transaction.finish()` (iOS) or `acknowledgePurchase`
-     *   / `consumeAsync` (Android) before returning.
+     * Takes the full [PurchaseResult.Success] so both
+     * `transactionId` (iOS lookup key) and `receiptToken`
+     * (Android lookup key / server primary key) are available.
+     *
+     * - StorePaymentSdk: acks/finishes with the store, then
+     *   POSTs the receipt to the Ops Platform.
      * - InHousePaymentSdk: calls backend API with txId.
      *   Fulfillment is driven by the gateway webhook on the
      *   backend, so no extra client-side ack is needed.
      */
     suspend fun getTransactionResult(
-        transactionId: String
+        purchase: PurchaseResult.Success
     ): Transaction
 }

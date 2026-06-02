@@ -13,7 +13,7 @@ enum CheckoutUiState {
 /// ViewModel that drives the checkout SwiftUI View.
 ///
 /// Programs against PaymentSdk — the same code works
-/// for both NativePaymentSdk and InHousePaymentSdk.
+/// for both StorePaymentSdk and InHousePaymentSdk.
 ///
 /// Flow:
 /// 1. loadProducts()    -> getProducts()
@@ -63,9 +63,7 @@ class CheckoutViewModel: ObservableObject {
                 uiState = .verifying
 
                 let tx = try? await
-                    paymentSdk.getTransactionResult(
-                        transactionId: success.transactionId
-                    )
+                    paymentSdk.getTransactionResult(purchase: success)
 
                 if tx?.status == .completed ||
                    tx?.status == .verified {

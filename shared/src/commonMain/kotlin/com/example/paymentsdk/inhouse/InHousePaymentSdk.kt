@@ -31,7 +31,7 @@ class InHousePaymentSdk(
     private val callbackScheme: String = "myapp"
 ) : PaymentSdk {
 
-    private val apiClient = PaymentApiClient(
+    private val apiClient = InHouseOpsApiClient(
         baseUrl,
         HttpClient {
             install(ContentNegotiation) { json() }
@@ -61,7 +61,7 @@ class InHousePaymentSdk(
     // ---- PaymentSdk ----
 
     override suspend fun getProducts(
-        productIds: List<String>?
+        productIds: List<String>
     ): List<Product> {
         return apiClient.fetchProducts(productIds)
     }
@@ -91,7 +91,10 @@ class InHousePaymentSdk(
 
                 when (status) {
                     "success" -> PurchaseResult.Success(
-                        transactionId = txId ?: ""
+                        transactionId = txId ?: "",
+                        // Gateway webhook on backend is authoritative;
+                        // SDK has no client-side receipt for in-house.
+                        receiptToken = ""
                     )
                     "cancel" -> PurchaseResult.UserCanceled
                     else -> PurchaseResult.Error(
@@ -109,10 +112,10 @@ class InHousePaymentSdk(
     }
 
     override suspend fun getTransactionResult(
-        transactionId: String
+        purchase: PurchaseResult.Success
     ): Transaction {
         // Fulfillment is driven by the gateway webhook on the
         // backend — no client-side ack call is needed here.
-        return apiClient.getTransaction(transactionId)
+        return apiClient.getTransaction(purchase.transactionId)
     }
 }

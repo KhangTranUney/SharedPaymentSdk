@@ -21,7 +21,7 @@ import com.example.paymentsdk.PaymentSdk
  * Composable checkout screen.
  *
  * Calls [PaymentSdk] via [CheckoutViewModel].
- * Works identically for both NativePaymentSdk and
+ * Works identically for both StorePaymentSdk and
  * InHousePaymentSdk — the Composable doesn't know
  * which track is active.
  */

@@ -5,7 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.lifecycle.lifecycleScope
-import com.example.app.sdkwrapper.NativePaymentSdk
+import com.example.app.sdkwrapper.StorePaymentSdk
 import com.example.paymentsdk.PaymentSdk
 import com.example.paymentsdk.inhouse.InHousePaymentSdk
 import kotlinx.coroutines.launch
@@ -17,10 +17,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val useNativeStore = true // feature flag
+        val useStoreTrack = true // feature flag
 
-        val paymentSdk: PaymentSdk = if (useNativeStore) {
-            NativePaymentSdk(this).also { sdk ->
+        val paymentSdk: PaymentSdk = if (useStoreTrack) {
+            StorePaymentSdk(
+                activity = this,
+                opsBaseUrl = "https://ops.example.com",
+                // Host-supplied auth — Ops Platform derives
+                // userId server-side from this token.
+                authTokenProvider = { authStore.currentAccessToken() }
+            ).also { sdk ->
                 lifecycleScope.launch {
                     sdk.connect()
                     sdk.syncMissedPurchases()

@@ -4,7 +4,7 @@ import shared
 /// SwiftUI checkout view.
 ///
 /// Calls PaymentSdk via CheckoutViewModel.
-/// Works identically for both NativePaymentSdk and
+/// Works identically for both StorePaymentSdk and
 /// InHousePaymentSdk — the View doesn't know which
 /// track is active.
 struct CheckoutView: View {

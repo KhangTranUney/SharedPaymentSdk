@@ -16,18 +16,16 @@ import io.ktor.http.contentType
  * HTTP client for the in-house payment backend.
  * Internal to the SDK — callers never see this class.
  */
-internal class PaymentApiClient(
+internal class InHouseOpsApiClient(
     private val baseUrl: String,
     private val httpClient: HttpClient
 ) {
 
     suspend fun fetchProducts(
-        productIds: List<String>?
+        productIds: List<String>
     ): List<Product> {
         return httpClient.get("$baseUrl/api/products") {
-            if (!productIds.isNullOrEmpty()) {
-                parameter("ids", productIds.joinToString(","))
-            }
+            parameter("ids", productIds.joinToString(","))
         }.body()
     }
 

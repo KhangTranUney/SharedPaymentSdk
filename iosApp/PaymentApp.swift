@@ -8,10 +8,15 @@ struct PaymentApp: App {
     let inHouseSdk: InHousePaymentSdk?
 
     init() {
-        let useNativeStore = true // feature flag
+        let useStoreTrack = true // feature flag
 
-        if useNativeStore {
-            paymentSdk = NativePaymentSdk()
+        if useStoreTrack {
+            paymentSdk = StorePaymentSdk(
+                opsBaseUrl: "https://ops.example.com",
+                // Host-supplied auth — Ops Platform derives
+                // userId server-side from this token.
+                authTokenProvider: { await AuthStore.shared.accessToken() }
+            )
             inHouseSdk = nil
         } else {
             let sdk = InHousePaymentSdk(

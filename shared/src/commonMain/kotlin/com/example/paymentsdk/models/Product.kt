@@ -2,7 +2,7 @@ package com.example.paymentsdk.models
 
 /**
  * Represents a product ready to be displayed in the UI.
- * Works for both native store products and in-house products.
+ * Works for both store products and in-house products.
  */
 data class Product(
     val productId: String,

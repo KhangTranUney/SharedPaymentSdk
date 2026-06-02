@@ -6,7 +6,7 @@ import com.example.paymentsdk.PaymentSdk
 import com.example.paymentsdk.models.Product
 import com.example.paymentsdk.models.PurchaseResult
 import com.example.paymentsdk.models.Transaction
-import com.example.paymentsdk.models.TransactionStatus
+import com.example.paymentsdk.store.StoreOpsApiClient
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.atomic.AtomicReference
@@ -19,12 +19,26 @@ import kotlin.coroutines.resume
  * Lives in the androidApp layer because Google Play
  * Billing is an Android-only SDK.
  */
-class NativePaymentSdk(
-    private val activity: Activity
+class StorePaymentSdk(
+    private val activity: Activity,
+    opsBaseUrl: String,
+    authTokenProvider: suspend () -> String
 ) : PaymentSdk {
+
+    private val opsClient = StoreOpsApiClient(
+        baseUrl = opsBaseUrl,
+        authTokenProvider = authTokenProvider
+    )
 
     private val pendingPurchaseContinuation =
         AtomicReference<CancellableContinuation<PurchaseResult>?>(null)
+
+    // Caches the live Purchase between purchase() and
+    // getTransactionResult() so we don't have to
+    // queryPurchasesAsync + filter again. Survives within
+    // a process; on cold restart, we fall back to a query.
+    private val pendingPurchases =
+        mutableMapOf<String, Purchase>()
 
     private val billingClient = BillingClient.newBuilder(activity)
         .setListener { billingResult, purchases ->
@@ -35,10 +49,21 @@ class NativePaymentSdk(
             when (billingResult.responseCode) {
 
                 BillingClient.BillingResponseCode.OK -> {
-                    val orderId =
-                        purchases?.firstOrNull()?.orderId ?: ""
+                    val purchase = purchases?.firstOrNull()
+                    val orderId = purchase?.orderId ?: ""
+                    val token = purchase?.purchaseToken ?: ""
+                    if (purchase != null) {
+                        // Key by both ids so getTransactionResult
+                        // can look up regardless of which the
+                        // caller passed back.
+                        pendingPurchases[orderId] = purchase
+                        pendingPurchases[token] = purchase
+                    }
                     continuation?.resume(
-                        PurchaseResult.Success(orderId)
+                        PurchaseResult.Success(
+                            transactionId = orderId,
+                            receiptToken = token
+                        )
                     )
                 }
 
@@ -93,12 +118,10 @@ class NativePaymentSdk(
     // ---- PaymentSdk Interface ----
 
     override suspend fun getProducts(
-        productIds: List<String>?
+        productIds: List<String>
     ): List<Product> {
 
-        // Google Play Billing requires explicit product ids;
-        // there is no "list all" API. Caller must supply them.
-        if (productIds.isNullOrEmpty()) return emptyList()
+        if (productIds.isEmpty()) return emptyList()
 
         ensureConnected()
 
@@ -164,61 +187,64 @@ class NativePaymentSdk(
     }
 
     /**
-     * Queries the store for the transaction and, if it is in
-     * the `PURCHASED` state and not yet acknowledged, calls
-     * `acknowledgePurchase` (subs / non-consumable) or
-     * `consumeAsync` (consumables) before returning.
+     * 1. Resolves the live `Purchase` (cached from `purchase()`,
+     *    falls back to `queryPurchasesAsync` by purchaseToken).
+     * 2. Acks/finishes the purchase. Google auto-refunds
+     *    purchases that are not acknowledged within 3 days,
+     *    so this must run on every successful purchase.
+     * 3. POSTs the receipt to the Ops Platform for
+     *    server-side verification (wire your HTTP client).
      *
-     * Google Play auto-refunds purchases that are not
-     * acknowledged within 3 days, so this must run on every
-     * successful purchase.
-     *
-     * Backend stays in sync via Play Real-time Developer
-     * Notifications (Google → backend), and the backend pushes
-     * updates to the app out-of-band (FCM) — no HTTP call from
-     * the SDK is needed.
+     * The host app is responsible for forwarding the returned
+     * [Transaction] to its own backend to grant entitlement —
+     * the SDK does not call the host backend.
      */
     override suspend fun getTransactionResult(
-        transactionId: String
+        purchase: PurchaseResult.Success
     ): Transaction {
 
         ensureConnected()
 
+        // 1. Prefer the cached live Purchase from purchase().
+        //    Fall back to queryPurchasesAsync on cold restart.
+        val storePurchase = pendingPurchases[purchase.receiptToken]
+            ?: pendingPurchases[purchase.transactionId]
+            ?: queryPurchaseByToken(purchase.receiptToken)
+
+        // 2. Ack/finish so Google does not auto-refund after 3 days.
+        if (storePurchase != null &&
+            storePurchase.purchaseState == Purchase.PurchaseState.PURCHASED &&
+            !storePurchase.isAcknowledged
+        ) {
+            val ackParams = AcknowledgePurchaseParams.newBuilder()
+                .setPurchaseToken(storePurchase.purchaseToken)
+                .build()
+            billingClient.acknowledgePurchase(ackParams)
+        }
+
+        // 3. Clear cache entries for this purchase.
+        pendingPurchases.remove(purchase.receiptToken)
+        pendingPurchases.remove(purchase.transactionId)
+
+        // 4. POST receipt to Ops Platform. Ops verifies with
+        //    Google Play Developer API server-side and returns
+        //    the canonical Transaction.
+        return opsClient.verifyReceipt(
+            transactionId = purchase.transactionId,
+            receiptToken = purchase.receiptToken
+        )
+    }
+
+    private suspend fun queryPurchaseByToken(
+        token: String
+    ): Purchase? {
         val result = billingClient.queryPurchasesAsync(
             QueryPurchasesParams.newBuilder()
                 .setProductType(BillingClient.ProductType.SUBS)
                 .build()
         )
-
-        val purchase = result.purchasesList.firstOrNull {
-            it.orderId == transactionId
+        return result.purchasesList.firstOrNull {
+            it.purchaseToken == token
         }
-
-        if (purchase != null &&
-            purchase.purchaseState == Purchase.PurchaseState.PURCHASED &&
-            !purchase.isAcknowledged
-        ) {
-            // acknowledgePurchase() for subs / non-consumables,
-            // or consumeAsync() for consumables.
-            val ackParams = AcknowledgePurchaseParams.newBuilder()
-                .setPurchaseToken(purchase.purchaseToken)
-                .build()
-            billingClient.acknowledgePurchase(ackParams)
-        }
-
-        return Transaction(
-            transactionId = transactionId,
-            productId = purchase?.products?.first() ?: "",
-            receiptToken = purchase?.purchaseToken ?: "",
-            status = when (purchase?.purchaseState) {
-                Purchase.PurchaseState.PENDING ->
-                    TransactionStatus.PENDING
-                Purchase.PurchaseState.PURCHASED ->
-                    TransactionStatus.COMPLETED
-                else ->
-                    TransactionStatus.FAILED
-            },
-            purchasedAt = purchase?.purchaseTime ?: 0
-        )
     }
 }
