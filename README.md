@@ -96,7 +96,7 @@ enum class TransactionStatus {
 
 ```kotlin
 interface PaymentSdk {
-    suspend fun getProducts(productIds: List<String>): List<Product>
+    suspend fun getProducts(productIds: List<String>? = null): List<Product>
     suspend fun purchase(product: Product): PurchaseResult
     // getTransactionResult also acknowledges / finishes the
     // transaction with the underlying provider before returning.
@@ -152,8 +152,9 @@ sequenceDiagram
     participant GW as Payment Gateway<br/>(Stripe / PayPal)
     participant BE as Backend
 
-    App->>SDK: getProducts(ids)
-    SDK->>API: GET /api/products?ids=...
+    App->>SDK: getProducts(ids?)
+    Note over SDK,API: ids is optional. When null, the backend<br/>returns the full catalog for this client.
+    SDK->>API: GET /api/products[?ids=...]
     API->>BE: HTTP GET (X-Client-Id)
     BE-->>API: [Product list]
     API-->>SDK: [Product list]
@@ -228,7 +229,7 @@ Dismissal detection (user pressing back from Custom Tab) is handled internally b
 ### 3e. Backend API Contract
 
 ```
-GET  /api/products?ids=prod_1,prod_2         → [Product]
+GET  /api/products[?ids=prod_1,prod_2]       → [Product]  (ids optional)
 POST /api/checkout  {productId, returnUrl}   → {checkoutUrl, sessionId, expiresAt}
 GET  /api/transactions/{id}                  → Transaction
 ```
@@ -258,31 +259,34 @@ sequenceDiagram
     participant Store as Google Play Billing /<br/>StoreKit 2
     participant Backend as Your Backend<br/>(catalog + receipt verification)
 
+    Note over App,Backend: Host app fetches the product catalog<br/>(ids + display metadata) from its own<br/>backend endpoint (out of SDK scope)
     App->>SDK: getProducts(ids)
-    SDK->>Store: queryProductDetails(ids) /<br/>Product.products(for:)
+    SDK->>Store: Android: queryProductDetails(ids) /<br/>iOS: Product.products(for:)
     Store-->>SDK: [Product list]
     SDK-->>App: [Product list] (mapped from store)
 
-    opt Enrich catalog from backend
-        App->>Backend: GET /api/products?ids=...
-        Backend-->>App: [Product list] (server metadata:<br/>images, descriptions, badges, ...)
-        Note over App: Merge store products (price, currency,<br/>productId — source of truth) with<br/>backend products (display metadata)<br/>before rendering UI
-    end
-
     User->>App: tap Buy
     App->>SDK: purchase(product)
-    SDK->>Store: launchBillingFlow(activity) /<br/>product.purchase()
+    SDK->>Store: Android: launchBillingFlow(activity) /<br/>iOS: product.purchase()
     Store->>User: show OS payment sheet
-    User->>Store: confirm payment
-    Store->>Backend: server notification: update transaction<br/>(App Store Server Notifications V2 /<br/>Play Real-time Developer Notifications)
-    Backend-->>Store: 200 OK
-    Store-->>SDK: transaction id<br/>(Play: Purchase.orderId / StoreKit: Transaction.id)
-    SDK-->>App: PurchaseResult.Success(transactionId)
+    User->>Store: do payment
 
-    App->>SDK: getTransactionResult(id)
-    SDK->>Store: query + ack/finish transaction<br/>(Android: queryPurchasesAsync + acknowledgePurchase /<br/>iOS: Transaction.all + Transaction.finish())
-    Store-->>SDK: Transaction (with receipt)
-    SDK-->>App: Transaction
+    par Server-side (out of band)
+        Store->>Backend: server notification:<br/>transaction id + user id + receipt<br/>(iOS: App Store Server Notifications V2 with<br/>signedTransactionInfo + appAccountToken /<br/>Android: Play RTDN with purchaseToken +<br/>obfuscatedAccountId)
+        alt iOS
+            Backend->>Backend: verify JWS signature locally<br/>(Apple Root CA, no network call)
+        else Android
+            Backend->>Store: purchases.products.get(purchaseToken)<br/>(required — RTDN payload has no details)
+            Store-->>Backend: verified transaction details
+        end
+    and Client-side
+        Store-->>SDK: transaction id<br/>(Play: Purchase.orderId / StoreKit: Transaction.id)
+        SDK-->>App: PurchaseResult.Success(transactionId)
+        App->>SDK: getTransactionResult(id)
+        SDK->>Store: query + ack/finish transaction<br/>(Android: queryPurchasesAsync + acknowledgePurchase /<br/>iOS: Transaction.all + Transaction.finish())
+        Store-->>SDK: Transaction (with receipt)
+        SDK-->>App: Transaction
+    end
 
     Note over Backend,App: Out-of-band: backend has already received<br/>the server notification above and may push<br/>the verified transaction to the app<br/>(Android: FCM / iOS: APNs).<br/>No HTTP call from the SDK.
 ```

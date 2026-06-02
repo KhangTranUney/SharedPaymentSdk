@@ -22,10 +22,12 @@ internal class PaymentApiClient(
 ) {
 
     suspend fun fetchProducts(
-        productIds: List<String>
+        productIds: List<String>?
     ): List<Product> {
         return httpClient.get("$baseUrl/api/products") {
-            parameter("ids", productIds.joinToString(","))
+            if (!productIds.isNullOrEmpty()) {
+                parameter("ids", productIds.joinToString(","))
+            }
         }.body()
     }
 

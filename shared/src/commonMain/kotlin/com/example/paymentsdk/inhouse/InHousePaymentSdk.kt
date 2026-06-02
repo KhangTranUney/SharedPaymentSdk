@@ -61,7 +61,7 @@ class InHousePaymentSdk(
     // ---- PaymentSdk ----
 
     override suspend fun getProducts(
-        productIds: List<String>
+        productIds: List<String>?
     ): List<Product> {
         return apiClient.fetchProducts(productIds)
     }

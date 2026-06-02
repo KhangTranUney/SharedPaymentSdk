@@ -93,8 +93,12 @@ class NativePaymentSdk(
     // ---- PaymentSdk Interface ----
 
     override suspend fun getProducts(
-        productIds: List<String>
+        productIds: List<String>?
     ): List<Product> {
+
+        // Google Play Billing requires explicit product ids;
+        // there is no "list all" API. Caller must supply them.
+        if (productIds.isNullOrEmpty()) return emptyList()
 
         ensureConnected()
 

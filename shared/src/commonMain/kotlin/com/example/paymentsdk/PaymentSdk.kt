@@ -23,11 +23,14 @@ interface PaymentSdk {
     /**
      * Fetch available products for display.
      *
-     * - NativePaymentSdk: queries Google Play / App Store
-     * - InHousePaymentSdk: calls backend API
+     * @param productIds optional list of product ids to fetch.
+     *   - InHousePaymentSdk: when null, the backend returns
+     *     the full catalog for this client.
+     *   - NativePaymentSdk: required (store APIs need ids).
+     *     Returns an empty list when null.
      */
     suspend fun getProducts(
-        productIds: List<String>
+        productIds: List<String>? = null
     ): List<Product>
 
     /**

@@ -11,11 +11,17 @@ class NativePaymentSdk: PaymentSdk {
     // MARK: - Get Products
 
     func getProducts(
-        productIds: [String]
+        productIds: [String]?
     ) async throws -> [Product] {
 
+        // StoreKit 2 requires explicit product ids; there is
+        // no "list all" API. Caller must supply them.
+        guard let ids = productIds, !ids.isEmpty else {
+            return []
+        }
+
         let storeProducts = try await StoreKit.Product.products(
-            for: productIds
+            for: ids
         )
 
         return storeProducts.map { p in
