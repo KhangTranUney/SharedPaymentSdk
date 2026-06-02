@@ -165,7 +165,7 @@ sequenceDiagram
     API->>BE: HTTP POST
     BE-->>API: {checkoutUrl, sessionId}
     API-->>SDK: CheckoutInfo
-    SDK->>Web: open(checkoutUrl)
+    SDK->>Web: open(checkoutUrl, callbackScheme)
     Web->>GW: load checkout page
     User->>GW: enter payment details
     GW->>BE: webhook: update purchase result<br/>(transaction status, amount, sessionId)
