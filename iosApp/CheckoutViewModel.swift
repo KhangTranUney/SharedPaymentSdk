@@ -17,9 +17,9 @@ enum CheckoutUiState {
 ///
 /// Flow:
 /// 1. loadProducts()    -> getProducts()
-/// 2. onBuyClicked()    -> purchase() -> getTransactionResult()
+/// 2. onBuyClicked()    -> purchase() -> postReceipt()
 ///    (the SDK acknowledges / finishes the transaction
-///    internally inside getTransactionResult)
+///    internally inside postReceipt)
 @MainActor
 class CheckoutViewModel: ObservableObject {
 
@@ -63,7 +63,7 @@ class CheckoutViewModel: ObservableObject {
                 uiState = .verifying
 
                 let tx = try? await
-                    paymentSdk.getTransactionResult(purchase: success)
+                    paymentSdk.postReceipt(purchase: success)
 
                 if tx?.status == .completed ||
                    tx?.status == .verified {

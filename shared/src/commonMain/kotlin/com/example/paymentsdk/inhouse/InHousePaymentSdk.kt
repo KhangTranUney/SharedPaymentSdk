@@ -111,11 +111,15 @@ class InHousePaymentSdk(
         }
     }
 
-    override suspend fun getTransactionResult(
+    override suspend fun postReceipt(
         purchase: PurchaseResult.Success
     ): Transaction {
         // Fulfillment is driven by the gateway webhook on the
-        // backend — no client-side ack call is needed here.
-        return apiClient.getTransaction(purchase.transactionId)
+        // backend — no client-side ack call is needed. We still
+        // POST so the host can use the verified Transaction.
+        return apiClient.verifyReceipt(
+            transactionId = purchase.transactionId,
+            receiptToken = purchase.receiptToken
+        )
     }
 }

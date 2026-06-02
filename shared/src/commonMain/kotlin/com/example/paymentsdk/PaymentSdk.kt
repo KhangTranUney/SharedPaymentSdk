@@ -12,11 +12,13 @@ import com.example.paymentsdk.models.Transaction
  * this interface — it does not know which track is active.
  *
  * Caller flow:
- * 1. getProducts()          -> render your own UI
- * 2. purchase(product)      -> SDK handles checkout UI
- * 3. getTransactionResult() -> confirm payment details
- *                              (SDK acknowledges / finishes
- *                              the transaction internally)
+ * 1. getProducts()      -> render your own UI
+ * 2. purchase(product)  -> SDK handles checkout UI
+ * 3. postReceipt(result) -> SDK acks/finishes with the
+ *                           store and POSTs the receipt to
+ *                           the Ops Platform; host then uses
+ *                           the result to verify the payment
+ *                           (e.g. enroll subscription).
  */
 interface PaymentSdk {
 
@@ -58,7 +60,7 @@ interface PaymentSdk {
      *   Fulfillment is driven by the gateway webhook on the
      *   backend, so no extra client-side ack is needed.
      */
-    suspend fun getTransactionResult(
+    suspend fun postReceipt(
         purchase: PurchaseResult.Success
     ): Transaction
 }

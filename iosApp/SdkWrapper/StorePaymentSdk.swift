@@ -11,7 +11,7 @@ class StorePaymentSdk: PaymentSdk {
     private let opsClient: StoreOpsApiClient
 
     // Caches the verified StoreKit.Transaction between purchase()
-    // and getTransactionResult() so we can call .finish() without
+    // and postReceipt() so we can call .finish() without
     // iterating Transaction.all again. Survives within a process;
     // on cold restart, we fall back to iterating Transaction.all.
     private var pendingTransactions: [String: StoreKit.Transaction] = [:]
@@ -89,7 +89,7 @@ class StorePaymentSdk: PaymentSdk {
                 )
             }
             let txId = String(transaction.id)
-            // Cache the live Transaction so getTransactionResult()
+            // Cache the live Transaction so postReceipt()
             // can call .finish() without iterating Transaction.all.
             pendingTransactions[txId] = transaction
             return PurchaseResult.Success(
@@ -125,10 +125,9 @@ class StorePaymentSdk: PaymentSdk {
     ///    Platform for server-side verification (wire your
     ///    HTTP client here).
     ///
-    /// The host app is responsible for forwarding the returned
-    /// Transaction to its own backend to grant entitlement —
-    /// the SDK does not call the host backend.
-    func getTransactionResult(
+    /// The host app uses the returned Transaction to verify
+    /// the payment (e.g. enroll subscription, unlock feature).
+    func postReceipt(
         purchase: PurchaseResult.Success
     ) async throws -> Transaction {
 

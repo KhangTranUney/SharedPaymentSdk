@@ -42,11 +42,16 @@ internal class InHouseOpsApiClient(
         }.body()
     }
 
-    suspend fun getTransaction(
-        transactionId: String
+    suspend fun verifyReceipt(
+        transactionId: String,
+        receiptToken: String
     ): Transaction {
-        return httpClient.get(
-            "$baseUrl/api/transactions/$transactionId"
-        ).body()
+        return httpClient.post("$baseUrl/verify-receipt") {
+            contentType(ContentType.Application.Json)
+            setBody(mapOf(
+                "transactionId" to transactionId,
+                "receiptToken" to receiptToken
+            ))
+        }.body()
     }
 }

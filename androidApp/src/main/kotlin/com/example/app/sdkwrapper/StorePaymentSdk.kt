@@ -34,7 +34,7 @@ class StorePaymentSdk(
         AtomicReference<CancellableContinuation<PurchaseResult>?>(null)
 
     // Caches the live Purchase between purchase() and
-    // getTransactionResult() so we don't have to
+    // postReceipt() so we don't have to
     // queryPurchasesAsync + filter again. Survives within
     // a process; on cold restart, we fall back to a query.
     private val pendingPurchases =
@@ -59,7 +59,7 @@ class StorePaymentSdk(
                     val orderId = purchase?.orderId ?: ""
                     val token = purchase?.purchaseToken ?: ""
                     if (purchase != null) {
-                        // Key by both ids so getTransactionResult
+                        // Key by both ids so postReceipt
                         // can look up regardless of which the
                         // caller passed back.
                         pendingPurchases[orderId] = purchase
@@ -222,11 +222,10 @@ class StorePaymentSdk(
      * 3. POSTs the receipt to the Ops Platform for
      *    server-side verification (wire your HTTP client).
      *
-     * The host app is responsible for forwarding the returned
-     * [Transaction] to its own backend to grant entitlement —
-     * the SDK does not call the host backend.
+     * The host app uses the returned [Transaction] to verify
+     * the payment (e.g. enroll subscription, unlock feature).
      */
-    override suspend fun getTransactionResult(
+    override suspend fun postReceipt(
         purchase: PurchaseResult.Success
     ): Transaction {
 

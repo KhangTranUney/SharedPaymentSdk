@@ -41,7 +41,7 @@ A Kotlin Multiplatform payment SDK with two tracks: **store billing** (Google Pl
 ```
 1. val products = sdk.getProducts(ids)         // render your own UI
 2. val result   = sdk.purchase(product)        // SDK shows OS sheet or browser
-3. val tx       = sdk.getTransactionResult(result) // SDK acks/finishes with the
+3. val tx       = sdk.postReceipt(result) // SDK acks/finishes with the
                                                    // store + POSTs receipt to Ops
 ```
 
@@ -111,7 +111,7 @@ interface PaymentSdk {
     // transactionId (iOS lookup) and receiptToken (Android lookup
     // + server primary key). Acks/finishes with the provider
     // and POSTs the receipt to the Ops Platform before returning.
-    suspend fun getTransactionResult(purchase: PurchaseResult.Success): Transaction
+    suspend fun postReceipt(purchase: PurchaseResult.Success): Transaction
 }
 ```
 
@@ -184,11 +184,11 @@ sequenceDiagram
     Note over SDK: SDK verifies scheme matches callbackScheme,<br/>parses params, resumes suspended purchase()
     SDK-->>App: PurchaseResult.Success(transactionId, receiptToken="")
 
-    App->>SDK: getTransactionResult(success)
-    SDK->>Ops: GET /api/transactions/{id}
-    Ops-->>SDK: Transaction
+    App->>SDK: postReceipt(success)
+    SDK->>Ops: POST /verify-receipt<br/>(X-Client-Id)<br/>body { transactionId, receiptToken="" }
+    Ops-->>SDK: verified Transaction
     SDK-->>App: Transaction
-    Note over App: Host app forwards the returned Transaction<br/>to its own backend to grant entitlement<br/>(SDK does not call the host backend).
+    Note over App: Host app uses the result to verify the<br/>payment (e.g. enroll subscription, unlock feature).
 ```
 
 **Cancellation path:** if the user dismisses the Custom Tab / SFSafariViewController without completing payment, the SDK's lifecycle observer detects the dismissal and resumes `purchase()` with `PurchaseResult.UserCanceled`.
@@ -236,7 +236,7 @@ Dismissal detection (user pressing back from Custom Tab) is handled internally b
 ```
 GET  /api/products?ids=prod_1,prod_2         → [Product]  (ids required)
 POST /api/checkout  {productId, returnUrl}   → {checkoutUrl, sessionId, expiresAt}
-GET  /api/transactions/{id}                  → Transaction
+POST /verify-receipt {transactionId, receiptToken} → Transaction
 ```
 
 Fulfillment is driven by the gateway → backend webhook (see sequence diagram step 11), not by a client call.
@@ -279,13 +279,15 @@ sequenceDiagram
     Note over SDK: SDK maps store-specific fields into PurchaseResult.Success:<br/>transactionId = Android orderId / iOS Transaction.id<br/>receiptToken  = Android purchaseToken / iOS jwsRepresentation
     SDK-->>App: PurchaseResult.Success(transactionId, receiptToken)
 
-    App->>SDK: getTransactionResult(success)
+    App->>SDK: postReceipt(success)
     SDK->>Store: ack/finish transaction<br/>(Android: acknowledgePurchase(purchaseToken) /<br/>iOS: Transaction.finish())
     SDK->>Ops: POST /verify-receipt<br/>Authorization Bearer [host-supplied token]<br/>body { transactionId, receiptToken }
     Note over App,SDK: Host app supplies the auth token to the SDK<br/>(at construction or via a token provider).<br/>Ops Platform derives userId from the token server-side.
+    Ops->>Store: verify receipt
+    Store-->>Ops: verified transaction
     Ops-->>SDK: verified Transaction
     SDK-->>App: Transaction
-    Note over App: Host app forwards the returned Transaction<br/>to its own backend to grant entitlement<br/>(SDK does not call the host backend).
+    Note over App: Host app uses the result to verify the<br/>payment (e.g. enroll subscription, unlock feature).
 ```
 
 **Cancellation path:** if the user dismisses the OS payment sheet, the store SDK returns a `USER_CANCELED` result, which `StorePaymentSdk` maps to `PurchaseResult.UserCanceled`.
@@ -322,8 +324,8 @@ class CheckoutViewModel(private val sdk: PaymentSdk) : ViewModel() {
             when (val result = sdk.purchase(product)) {
                 is PurchaseResult.Success -> {
                     // SDK acks/finishes internally + POSTs receipt to Ops
-                    val tx = sdk.getTransactionResult(result)
-                    // Forward tx to your own backend to grant entitlement
+                    val tx = sdk.postReceipt(result)
+                    // Use tx to verify the payment (e.g. enroll subscription)
                 }
                 is PurchaseResult.UserCanceled -> { /* idle */ }
                 is PurchaseResult.Error -> { /* show error */ }
@@ -356,8 +358,8 @@ func onBuyClicked(product: Product) {
         switch result {
         case let success as PurchaseResult.Success:
             // SDK acks/finishes internally + POSTs receipt to Ops
-            let tx = try await paymentSdk.getTransactionResult(purchase: success)
-            // Forward tx to your own backend to grant entitlement
+            let tx = try await paymentSdk.postReceipt(purchase: success)
+            // Use tx to verify the payment (e.g. enroll subscription)
         case is PurchaseResult.UserCanceled: break
         case let error as PurchaseResult.Error: /* show error */
         }
