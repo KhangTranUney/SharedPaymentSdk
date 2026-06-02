@@ -149,24 +149,20 @@ class StorePaymentSdk: PaymentSdk {
             return nil
         }()
 
-        guard let tx = storeTx else {
-            return Transaction(
-                transactionId: purchase.transactionId,
-                productId: "",
-                receiptToken: purchase.receiptToken,
-                status: .failed,
-                purchasedAt: 0
-            )
+        // 2. If we found the live tx, finish it so StoreKit
+        //    stops re-delivering. If we didn't (cold restart
+        //    edge case), skip finish — Ops + ASSN V2 can still
+        //    reconcile from the JWS receipt we already have.
+        if let tx = storeTx {
+            await tx.finish()
         }
-
-        // 2. Finish so StoreKit does not re-deliver this tx.
-        await tx.finish()
 
         // 3. Clear cache.
         pendingTransactions.removeValue(forKey: purchase.transactionId)
 
-        // 4. POST receipt to Ops Platform. Ops verifies the JWS
-        //    server-side and returns the canonical Transaction.
+        // 4. POST receipt to Ops Platform. The signed JWS is
+        //    the source of truth; Ops verifies it server-side
+        //    and returns the canonical Transaction.
         return try await opsClient.verifyReceipt(
             transactionId: purchase.transactionId,
             receiptToken: purchase.receiptToken

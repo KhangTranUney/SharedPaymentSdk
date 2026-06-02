@@ -34,7 +34,7 @@ A Kotlin Multiplatform payment SDK with two tracks: **store billing** (Google Pl
 | **Lives in** | App layer (`sdkwrapper/`) | KMP shared module |
 | **Checkout UI** | OS payment sheet | CustomTabsIntent / SFSafariViewController |
 | **Internals hidden?** | N/A (platform SDK) | Yes — `InHouseOpsApiClient` and `PaymentWebView` are `internal` |
-| **Constructor** | `StorePaymentSdk(activity)` | `InHousePaymentSdk(context, clientId, baseUrl)` — single class in `commonMain` |
+| **Constructor** | `StorePaymentSdk(activity, opsBaseUrl, authTokenProvider)` | `InHousePaymentSdk(context, clientId, opsBaseUrl)` — single class in `commonMain` |
 
 **Caller flow is identical for both tracks:**
 
@@ -128,7 +128,7 @@ Fully in KMP. Single class in `commonMain` — no `expect/actual` needed for `In
 class InHousePaymentSdk(
     context: PlatformContext,     // Android = Activity, iOS = empty class
     clientId: String,
-    baseUrl: String,
+    opsBaseUrl: String,
     callbackScheme: String = "myapp"
 ) : PaymentSdk {
 
@@ -311,7 +311,7 @@ val paymentSdk: PaymentSdk = if (useStoreTrack) {
     InHousePaymentSdk(
         context = this,
         clientId = "your-company-id",
-        baseUrl = "https://api.example.com"
+        opsBaseUrl = "https://ops.example.com"
     )
 }
 
@@ -346,7 +346,7 @@ let paymentSdk: PaymentSdk = useStoreTrack
     : InHousePaymentSdk(
           context: PlatformContext(),
           clientId: "your-company-id",
-          baseUrl: "https://api.example.com"
+          opsBaseUrl: "https://ops.example.com"
       )
 
 // ViewModel — identical for both tracks
@@ -416,7 +416,7 @@ iosApp/
 | Decision | Rationale |
 |----------|-----------|
 | **`sealed interface PurchaseResult`** | More flexible than sealed class. Uses `data object` for singletons. |
-| **`InHouseOpsApiClient` + `PaymentWebView` are `internal`** | Caller only sees `InHousePaymentSdk(clientId, baseUrl)`. No leaking of HTTP client or browser details. |
+| **`InHouseOpsApiClient` + `PaymentWebView` are `internal`** | Caller only sees `InHousePaymentSdk(clientId, opsBaseUrl)`. No leaking of HTTP client or browser details. |
 | **Single class + `PlatformContext`** | `InHousePaymentSdk` is one class in `commonMain` (not expect/actual). `expect class PlatformContext` abstracts the Android `Activity` dependency. All business logic in one place. |
 | **`handlePaymentCallback()` checks scheme internally** | Caller forwards all URLs blindly. SDK matches against `callbackScheme` and returns `Boolean`. |
 | **CustomTabsIntent / SFSafariViewController** | System browser sandbox, visible URL bar, shared cookies. More secure than in-app WebView for payments. |

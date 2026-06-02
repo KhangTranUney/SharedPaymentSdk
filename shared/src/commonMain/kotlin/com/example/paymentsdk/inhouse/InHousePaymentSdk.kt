@@ -15,10 +15,10 @@ import io.ktor.serialization.kotlinx.json.json
  *
  * ```kotlin
  * // Android
- * val sdk = InHousePaymentSdk(this, "client-id", "https://api.example.com")
+ * val sdk = InHousePaymentSdk(this, "client-id", "https://ops.example.com")
  *
  * // iOS
- * val sdk = InHousePaymentSdk(PlatformContext(), "client-id", "https://api.example.com")
+ * val sdk = InHousePaymentSdk(PlatformContext(), "client-id", "https://ops.example.com")
  * ```
  *
  * All internals (HTTP client, browser) are hidden.
@@ -27,12 +27,12 @@ import io.ktor.serialization.kotlinx.json.json
 class InHousePaymentSdk(
     context: PlatformContext,
     clientId: String,
-    baseUrl: String,
+    opsBaseUrl: String,
     private val callbackScheme: String = "myapp"
 ) : PaymentSdk {
 
     private val apiClient = InHouseOpsApiClient(
-        baseUrl,
+        opsBaseUrl,
         HttpClient {
             install(ContentNegotiation) { json() }
             defaultRequest {

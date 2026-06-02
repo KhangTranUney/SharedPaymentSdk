@@ -36,7 +36,7 @@ class MainActivity : ComponentActivity() {
             InHousePaymentSdk(
                 context = this,
                 clientId = "your-company-id",
-                baseUrl = "https://api.example.com"
+                opsBaseUrl = "https://ops.example.com"
             ).also { inHouseSdk = it }
         }
 

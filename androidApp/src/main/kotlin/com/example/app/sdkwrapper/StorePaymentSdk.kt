@@ -40,6 +40,12 @@ class StorePaymentSdk(
     private val pendingPurchases =
         mutableMapOf<String, Purchase>()
 
+    // Caches ProductDetails so purchase() can launch the
+    // billing flow without re-querying. Populated by
+    // getProducts().
+    private val productDetailsCache =
+        mutableMapOf<String, ProductDetails>()
+
     private val billingClient = BillingClient.newBuilder(activity)
         .setListener { billingResult, purchases ->
 
@@ -146,6 +152,8 @@ class StorePaymentSdk(
         }
 
         return detailsList?.map { details ->
+            productDetailsCache[details.productId] = details
+
             val phase = details.subscriptionOfferDetails
                 ?.firstOrNull()
                 ?.pricingPhases
@@ -170,6 +178,13 @@ class StorePaymentSdk(
 
         ensureConnected()
 
+        val details = productDetailsCache[product.productId]
+            ?: return PurchaseResult.Error(
+                code = -1,
+                message = "Unknown product ${product.productId}; " +
+                    "call getProducts() first"
+            )
+
         return suspendCancellableCoroutine { continuation ->
 
             pendingPurchaseContinuation.set(continuation)
@@ -180,9 +195,21 @@ class StorePaymentSdk(
                 )
             }
 
-            // Look up cached ProductDetails by productId
-            // and launch billing flow...
-            // billingClient.launchBillingFlow(activity, params)
+            val offerToken = details.subscriptionOfferDetails
+                ?.firstOrNull()
+                ?.offerToken
+
+            val productParams = BillingFlowParams.ProductDetailsParams
+                .newBuilder()
+                .setProductDetails(details)
+                .apply { offerToken?.let { setOfferToken(it) } }
+                .build()
+
+            val flowParams = BillingFlowParams.newBuilder()
+                .setProductDetailsParamsList(listOf(productParams))
+                .build()
+
+            billingClient.launchBillingFlow(activity, flowParams)
         }
     }
 

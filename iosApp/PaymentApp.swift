@@ -22,7 +22,7 @@ struct PaymentApp: App {
             let sdk = InHousePaymentSdk(
                 context: PlatformContext(),
                 clientId: "your-company-id",
-                baseUrl: "https://api.example.com"
+                opsBaseUrl: "https://ops.example.com"
             )
             paymentSdk = sdk
             inHouseSdk = sdk
