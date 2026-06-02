@@ -84,6 +84,14 @@ class NativePaymentSdk: PaymentSdk {
 
     // MARK: - Get Transaction Result
 
+    /// Returns the verified transaction from StoreKit and calls
+    /// `transaction.finish()` so StoreKit stops re-delivering
+    /// it on subsequent launches.
+    ///
+    /// Backend stays in sync via App Store Server Notifications
+    /// V2 (Apple → backend), and the backend pushes updates to
+    /// the app out-of-band (APNs / silent push) — no HTTP call
+    /// from the SDK is needed.
     func getTransactionResult(
         transactionId: String
     ) async throws -> Transaction {
@@ -101,6 +109,8 @@ class NativePaymentSdk: PaymentSdk {
         for await result in StoreKit.Transaction.all {
             guard case .verified(let tx) = result,
                   tx.id == txId else { continue }
+
+            await tx.finish()
 
             return Transaction(
                 transactionId: String(tx.id),
@@ -121,21 +131,5 @@ class NativePaymentSdk: PaymentSdk {
             status: .failed,
             purchasedAt: 0
         )
-    }
-
-    // MARK: - Finish Transaction
-
-    func finishTransaction(
-        transactionId: String
-    ) async throws {
-
-        guard let txId = UInt64(transactionId) else { return }
-
-        for await result in StoreKit.Transaction.unfinished {
-            guard case .verified(let tx) = result,
-                  tx.id == txId else { continue }
-            await tx.finish()
-            break
-        }
     }
 }

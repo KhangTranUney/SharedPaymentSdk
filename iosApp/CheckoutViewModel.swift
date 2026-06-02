@@ -17,7 +17,9 @@ enum CheckoutUiState {
 ///
 /// Flow:
 /// 1. loadProducts()    -> getProducts()
-/// 2. onBuyClicked()    -> purchase() -> getTransactionResult() -> finishTransaction()
+/// 2. onBuyClicked()    -> purchase() -> getTransactionResult()
+///    (the SDK acknowledges / finishes the transaction
+///    internally inside getTransactionResult)
 @MainActor
 class CheckoutViewModel: ObservableObject {
 
@@ -67,9 +69,6 @@ class CheckoutViewModel: ObservableObject {
 
                 if tx?.status == .completed ||
                    tx?.status == .verified {
-                    try? await paymentSdk.finishTransaction(
-                        transactionId: success.transactionId
-                    )
                     uiState = .success
                 } else {
                     uiState = .error("Transaction failed")

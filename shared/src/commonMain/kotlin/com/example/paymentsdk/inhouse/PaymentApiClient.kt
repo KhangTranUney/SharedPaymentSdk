@@ -49,12 +49,4 @@ internal class PaymentApiClient(
             "$baseUrl/api/transactions/$transactionId"
         ).body()
     }
-
-    suspend fun fulfillTransaction(
-        transactionId: String
-    ) {
-        httpClient.post(
-            "$baseUrl/api/transactions/$transactionId/fulfill"
-        )
-    }
 }

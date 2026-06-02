@@ -26,7 +26,9 @@ sealed interface CheckoutUiState {
  *
  * Flow:
  * 1. loadProducts()    -> getProducts()
- * 2. onBuyClicked()    -> purchase() -> getTransactionResult() -> finishTransaction()
+ * 2. onBuyClicked()    -> purchase() -> getTransactionResult()
+ *    (the SDK acknowledges / finishes the transaction
+ *    internally inside getTransactionResult)
  */
 class CheckoutViewModel(
     private val paymentSdk: PaymentSdk
@@ -65,9 +67,6 @@ class CheckoutViewModel(
                     if (tx.status == TransactionStatus.COMPLETED ||
                         tx.status == TransactionStatus.VERIFIED
                     ) {
-                        paymentSdk.finishTransaction(
-                            result.transactionId
-                        )
                         _uiState.value = CheckoutUiState.Success
                     } else {
                         _uiState.value = CheckoutUiState.Error(

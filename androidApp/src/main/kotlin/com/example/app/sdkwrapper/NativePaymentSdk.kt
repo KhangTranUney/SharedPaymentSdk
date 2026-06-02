@@ -159,6 +159,21 @@ class NativePaymentSdk(
         }
     }
 
+    /**
+     * Queries the store for the transaction and, if it is in
+     * the `PURCHASED` state and not yet acknowledged, calls
+     * `acknowledgePurchase` (subs / non-consumable) or
+     * `consumeAsync` (consumables) before returning.
+     *
+     * Google Play auto-refunds purchases that are not
+     * acknowledged within 3 days, so this must run on every
+     * successful purchase.
+     *
+     * Backend stays in sync via Play Real-time Developer
+     * Notifications (Google → backend), and the backend pushes
+     * updates to the app out-of-band (FCM) — no HTTP call from
+     * the SDK is needed.
+     */
     override suspend fun getTransactionResult(
         transactionId: String
     ): Transaction {
@@ -175,6 +190,18 @@ class NativePaymentSdk(
             it.orderId == transactionId
         }
 
+        if (purchase != null &&
+            purchase.purchaseState == Purchase.PurchaseState.PURCHASED &&
+            !purchase.isAcknowledged
+        ) {
+            // acknowledgePurchase() for subs / non-consumables,
+            // or consumeAsync() for consumables.
+            val ackParams = AcknowledgePurchaseParams.newBuilder()
+                .setPurchaseToken(purchase.purchaseToken)
+                .build()
+            billingClient.acknowledgePurchase(ackParams)
+        }
+
         return Transaction(
             transactionId = transactionId,
             productId = purchase?.products?.first() ?: "",
@@ -189,12 +216,5 @@ class NativePaymentSdk(
             },
             purchasedAt = purchase?.purchaseTime ?: 0
         )
-    }
-
-    override suspend fun finishTransaction(
-        transactionId: String
-    ) {
-        ensureConnected()
-        // acknowledgePurchase() or consumeAsync()
     }
 }

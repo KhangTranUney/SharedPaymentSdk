@@ -15,7 +15,8 @@ import com.example.paymentsdk.models.Transaction
  * 1. getProducts()          -> render your own UI
  * 2. purchase(product)      -> SDK handles checkout UI
  * 3. getTransactionResult() -> confirm payment details
- * 4. finishTransaction()    -> acknowledge / fulfill
+ *                              (SDK acknowledges / finishes
+ *                              the transaction internally)
  */
 interface PaymentSdk {
 
@@ -42,22 +43,17 @@ interface PaymentSdk {
     suspend fun purchase(product: Product): PurchaseResult
 
     /**
-     * Get the final transaction result after purchase.
+     * Get the final transaction result after purchase, and
+     * acknowledge it with the underlying provider.
      *
-     * - NativePaymentSdk: queries store for transaction
-     * - InHousePaymentSdk: calls backend API with txId
+     * - NativePaymentSdk: queries the store, then calls
+     *   `transaction.finish()` (iOS) or `acknowledgePurchase`
+     *   / `consumeAsync` (Android) before returning.
+     * - InHousePaymentSdk: calls backend API with txId.
+     *   Fulfillment is driven by the gateway webhook on the
+     *   backend, so no extra client-side ack is needed.
      */
     suspend fun getTransactionResult(
         transactionId: String
     ): Transaction
-
-    /**
-     * Acknowledge that the transaction was processed.
-     *
-     * - NativePaymentSdk: acknowledgePurchase() or
-     *   transaction.finish()
-     * - InHousePaymentSdk: calls backend API to verify
-     *   receipt and mark as fulfilled
-     */
-    suspend fun finishTransaction(transactionId: String)
 }

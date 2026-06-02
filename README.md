@@ -41,8 +41,8 @@ A Kotlin Multiplatform payment SDK with two tracks: **native store billing** (Go
 ```
 1. val products = sdk.getProducts(ids)        // render your own UI
 2. val result   = sdk.purchase(product)       // SDK shows OS sheet or browser
-3. val tx       = sdk.getTransactionResult(id)
-4.                sdk.finishTransaction(id)
+3. val tx       = sdk.getTransactionResult(id) // SDK acknowledges / finishes
+                                               // the transaction internally
 ```
 
 ---
@@ -98,8 +98,9 @@ enum class TransactionStatus {
 interface PaymentSdk {
     suspend fun getProducts(productIds: List<String>): List<Product>
     suspend fun purchase(product: Product): PurchaseResult
+    // getTransactionResult also acknowledges / finishes the
+    // transaction with the underlying provider before returning.
     suspend fun getTransactionResult(transactionId: String): Transaction
-    suspend fun finishTransaction(transactionId: String)
 }
 ```
 
@@ -154,9 +155,9 @@ sequenceDiagram
     App->>SDK: getProducts(ids)
     SDK->>API: GET /api/products?ids=...
     API->>BE: HTTP GET (X-Client-Id)
-    BE-->>API: [Product]
-    API-->>SDK: [Product]
-    SDK-->>App: [Product]
+    BE-->>API: [Product list]
+    API-->>SDK: [Product list]
+    SDK-->>App: [Product list]
 
     User->>App: tap Buy
     App->>SDK: purchase(product)
@@ -181,13 +182,7 @@ sequenceDiagram
     BE-->>API: Transaction
     API-->>SDK: Transaction
     SDK-->>App: Transaction
-
-    App->>SDK: finishTransaction(id)
-    SDK->>API: POST /api/transactions/{id}/fulfill
-    API->>BE: HTTP POST
-    BE-->>API: {ok}
-    API-->>SDK: {ok}
-    SDK-->>App: Unit
+    Note over BE: Fulfillment is driven by the gateway<br/>webhook above — no client-side ack needed.
 ```
 
 **Cancellation path:** if the user dismisses the Custom Tab / SFSafariViewController without completing payment, the SDK's lifecycle observer detects the dismissal and resumes `purchase()` with `PurchaseResult.UserCanceled`.
@@ -236,8 +231,9 @@ Dismissal detection (user pressing back from Custom Tab) is handled internally b
 GET  /api/products?ids=prod_1,prod_2         → [Product]
 POST /api/checkout  {productId, returnUrl}   → {checkoutUrl, sessionId, expiresAt}
 GET  /api/transactions/{id}                  → Transaction
-POST /api/transactions/{id}/fulfill          → {ok}
 ```
+
+Fulfillment is driven by the gateway → backend webhook (see sequence diagram step 11), not by a client call.
 
 All requests include `X-Client-Id` header (set automatically by the SDK from the `clientId` parameter).
 
@@ -264,12 +260,12 @@ sequenceDiagram
 
     App->>SDK: getProducts(ids)
     SDK->>Store: queryProductDetails(ids) /<br/>Product.products(for:)
-    Store-->>SDK: ProductDetails / Product
-    SDK-->>App: [Product] (mapped from store)
+    Store-->>SDK: [Product list]
+    SDK-->>App: [Product list] (mapped from store)
 
     opt Enrich catalog from backend
         App->>Backend: GET /api/products?ids=...
-        Backend-->>App: [Product] (server metadata:<br/>images, descriptions, badges, ...)
+        Backend-->>App: [Product list] (server metadata:<br/>images, descriptions, badges, ...)
         Note over App: Merge store products (price, currency,<br/>productId — source of truth) with<br/>backend products (display metadata)<br/>before rendering UI
     end
 
@@ -278,19 +274,17 @@ sequenceDiagram
     SDK->>Store: launchBillingFlow(activity) /<br/>product.purchase()
     Store->>User: show OS payment sheet
     User->>Store: confirm payment
-    Store-->>SDK: Purchase / Transaction (with receipt)
+    Store->>Backend: server notification: update transaction<br/>(App Store Server Notifications V2 /<br/>Play Real-time Developer Notifications)
+    Backend-->>Store: 200 OK
+    Store-->>SDK: transaction id<br/>(Play: Purchase.orderId / StoreKit: Transaction.id)
     SDK-->>App: PurchaseResult.Success(transactionId)
 
     App->>SDK: getTransactionResult(id)
-    Note over SDK: Optionally POST receipt to backend<br/>for server-side verification
-    SDK->>Backend: verify(receiptToken)
-    Backend-->>SDK: verified Transaction
+    SDK->>Store: query for transaction<br/>(queryPurchasesAsync / Transaction.all)
+    Store-->>SDK: Purchase / Transaction (with receipt)
     SDK-->>App: Transaction
 
-    App->>SDK: finishTransaction(id)
-    SDK->>Store: acknowledgePurchase / consumePurchase /<br/>Transaction.finish()
-    Store-->>SDK: ack
-    SDK-->>App: Unit
+    Note over Backend,App: Out-of-band: backend has already received<br/>the server notification above and may push<br/>the verified transaction to the app via<br/>APNs / FCM. No HTTP call from the SDK.
 ```
 
 **Cancellation path:** if the user dismisses the OS payment sheet, the store SDK returns a `USER_CANCELED` result, which `NativePaymentSdk` maps to `PurchaseResult.UserCanceled`.
@@ -321,8 +315,8 @@ class CheckoutViewModel(private val sdk: PaymentSdk) : ViewModel() {
         viewModelScope.launch {
             when (val result = sdk.purchase(product)) {
                 is PurchaseResult.Success -> {
+                    // SDK acknowledges / finishes internally
                     val tx = sdk.getTransactionResult(result.transactionId)
-                    sdk.finishTransaction(result.transactionId)
                 }
                 is PurchaseResult.UserCanceled -> { /* idle */ }
                 is PurchaseResult.Error -> { /* show error */ }
@@ -350,8 +344,8 @@ func onBuyClicked(product: Product) {
         let result = try await paymentSdk.purchase(product: product)
         switch result {
         case let success as PurchaseResult.Success:
+            // SDK acknowledges / finishes internally
             let tx = try await paymentSdk.getTransactionResult(transactionId: success.transactionId)
-            try await paymentSdk.finishTransaction(transactionId: success.transactionId)
         case is PurchaseResult.UserCanceled: break
         case let error as PurchaseResult.Error: /* show error */
         }

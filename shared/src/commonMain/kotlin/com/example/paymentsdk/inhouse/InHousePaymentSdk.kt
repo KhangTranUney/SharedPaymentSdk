@@ -111,12 +111,8 @@ class InHousePaymentSdk(
     override suspend fun getTransactionResult(
         transactionId: String
     ): Transaction {
+        // Fulfillment is driven by the gateway webhook on the
+        // backend — no client-side ack call is needed here.
         return apiClient.getTransaction(transactionId)
-    }
-
-    override suspend fun finishTransaction(
-        transactionId: String
-    ) {
-        apiClient.fulfillTransaction(transactionId)
     }
 }
