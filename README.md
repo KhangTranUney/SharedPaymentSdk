@@ -170,6 +170,7 @@ sequenceDiagram
     User->>GW: enter payment details
     GW->>BE: webhook: update purchase result<br/>(transaction status, amount, sessionId)
     BE-->>GW: 200 OK
+    Note over BE: Fulfillment is driven by the gateway<br/>webhook above — no client-side ack needed.
     GW-->>Web: redirect myapp://payment/callback?status=success&transaction_id=123
     Web-->>App: OS routes deep link
     App->>SDK: handlePaymentCallback(uri)
@@ -182,7 +183,6 @@ sequenceDiagram
     BE-->>API: Transaction
     API-->>SDK: Transaction
     SDK-->>App: Transaction
-    Note over BE: Fulfillment is driven by the gateway<br/>webhook above — no client-side ack needed.
 ```
 
 **Cancellation path:** if the user dismisses the Custom Tab / SFSafariViewController without completing payment, the SDK's lifecycle observer detects the dismissal and resumes `purchase()` with `PurchaseResult.UserCanceled`.
