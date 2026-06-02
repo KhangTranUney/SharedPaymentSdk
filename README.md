@@ -167,6 +167,8 @@ sequenceDiagram
     SDK->>Web: open(checkoutUrl)
     Web->>GW: load checkout page
     User->>GW: enter payment details
+    GW->>BE: webhook: update purchase result<br/>(transaction status, amount, sessionId)
+    BE-->>GW: 200 OK
     GW-->>Web: redirect myapp://payment/callback?status=success&transaction_id=123
     Web-->>App: OS routes deep link
     App->>SDK: handlePaymentCallback(uri)
@@ -175,11 +177,15 @@ sequenceDiagram
 
     App->>SDK: getTransactionResult(id)
     SDK->>API: GET /api/transactions/{id}
+    API->>BE: HTTP GET
+    BE-->>API: Transaction
     API-->>SDK: Transaction
     SDK-->>App: Transaction
 
     App->>SDK: finishTransaction(id)
     SDK->>API: POST /api/transactions/{id}/fulfill
+    API->>BE: HTTP POST
+    BE-->>API: {ok}
     API-->>SDK: {ok}
     SDK-->>App: Unit
 ```
