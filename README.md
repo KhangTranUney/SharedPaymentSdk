@@ -280,11 +280,11 @@ sequenceDiagram
     SDK-->>App: PurchaseResult.Success(transactionId)
 
     App->>SDK: getTransactionResult(id)
-    SDK->>Store: query for transaction<br/>(queryPurchasesAsync / Transaction.all)
-    Store-->>SDK: Purchase / Transaction (with receipt)
+    SDK->>Store: query + ack/finish transaction<br/>(Android: queryPurchasesAsync + acknowledgePurchase /<br/>iOS: Transaction.all + Transaction.finish())
+    Store-->>SDK: Transaction (with receipt)
     SDK-->>App: Transaction
 
-    Note over Backend,App: Out-of-band: backend has already received<br/>the server notification above and may push<br/>the verified transaction to the app via<br/>APNs / FCM. No HTTP call from the SDK.
+    Note over Backend,App: Out-of-band: backend has already received<br/>the server notification above and may push<br/>the verified transaction to the app<br/>(Android: FCM / iOS: APNs).<br/>No HTTP call from the SDK.
 ```
 
 **Cancellation path:** if the user dismisses the OS payment sheet, the store SDK returns a `USER_CANCELED` result, which `NativePaymentSdk` maps to `PurchaseResult.UserCanceled`.
